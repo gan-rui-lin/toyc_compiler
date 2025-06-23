@@ -1,10 +1,12 @@
-(* astToIR.ml *)
-
 (* 引入 AST 和 IR 类型 *)
-open Ast (* 假设 AST 类型定义放在 Ast.ml *)
-open Ir   (* 假设 IR 类型定义放在 Ir.ml *)
+open Ast
+open Ir
 
 module Env = Map.Make(String)
+
+(* 
+  TODO: function(参数传递策略), break, continue, return
+*)
 
 (* 临时寄存器生成器 *)
 let temp_id = ref 0
