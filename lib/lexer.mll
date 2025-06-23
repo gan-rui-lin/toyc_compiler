@@ -1,7 +1,8 @@
 {
-open Parser  (* token 类型在 parser.mly 中定义 *)
-open Lexing
+open Parser  (* Import token types from parser *)
+open Lexing  (* For position handling *)
 
+(* Reserved keywords mapping *)
 let reserved = [
   ("int", INT);
   ("void", VOID);
@@ -12,62 +13,71 @@ let reserved = [
   ("continue", CONTINUE);
   ("return", RETURN);
 ]
+
+
 }
+
+(* Regular expression definitions *)
 let digit = ['0'-'9']
-let nondigit = ['A'-'Z' 'a'-'z' '_']
-let ident = (nondigit)(nondigit | digit)*
-let number = '-'? ( '0' | ['1'-'9'] digit* )
+let nondigit = ['a'-'z' 'A'-'Z' '_']
+let ident = nondigit (nondigit | digit)*
+let integer = '-'? ( '0' | ['1'-'9'] digit* )
+let whitespace = [' ' '\t' '\r']
 
-rule read_token = parse
-  | [' ' '\t' '\r' '\n']  { read_token lexbuf }  (* 忽略空白 *)
-
-  (* 单行注释 *)
-  | "//" [^ '\n']* '\n'   { read_token lexbuf }
-
-  (* 多行注释 *)
-  | "/*"                  { comment lexbuf }
- (* 关键词或ID *)
-  | ident {
-    let id = lexeme lexbuf in
-    (try List.assoc id reserved
-     with Not_found -> ID id)
-  }
-
-  (* 整数常量 *)
-  | number as n  { NUMBER (int_of_string n) }
-
-  (* 运算符和符号 *)
-  | "+"  { PLUS }
-  | "-"  { MINUS }
-  | "*"  { TIMES }
-  | "/"  { DIV }
-  | "%"  { MOD }
-  | "==" { EQ }
-  | "!=" { NEQ }
-  | "<=" { LE }
-  | ">=" { GE }
-  | "<"  { LT }
-  | ">"  { GT }
-  | "&&" { LAND }
-  | "||" { LOR }
-  | "="  { ASSIGN }
-  | ";"  { SEMI }
-  | ","  { COMMA }
-  | "("  { LPAREN }
-  | ")"  { RPAREN }
-  | "{"  { LBRACE }
-  | "}"  { RBRACE }
-  | "!"  { NOT }
-
-  | eof { EOF }
-
-  | _ as c {
+rule token = parse
+  | whitespace+    { token lexbuf }  (* Skip whitespace *)
+  | '\n'           { new_line lexbuf; token lexbuf } (* Count lines *)
+  
+  (* Comments *)
+  | "//" [^ '\n']* { token lexbuf }  (* 单行 *)
+  | "/*"           { comment lexbuf } (* 多行 *)
+  
+  (* Identifiers and keywords *)
+  | ident as id    { 
+      try List.assoc id reserved 
+      with Not_found -> ID id 
+    }
+  
+  (* Integer literals *)
+  | integer as n   { NUMBER (int_of_string n) }
+  
+  (* Operators *)
+  | "=="   { EQ }
+  | "!="   { NEQ }
+  | "<="   { LE }
+  | ">="   { GE }
+  | '<'    { LT }
+  | '>'    { GT }
+  | "&&"   { LAND }
+  | "||"   { LOR }
+  | '='    { ASSIGN }
+  | '+'    { PLUS }
+  | '-'    { MINUS }
+  | '*'    { TIMES }
+  | '/'    { DIV }
+  | '%'    { MOD }
+  | '!'    { NOT }
+  
+  (* Punctuation *)
+  | ';'    { SEMI }
+  | ','    { COMMA }
+  | '('    { LPAREN }
+  | ')'    { RPAREN }
+  | '{'    { LBRACE }
+  | '}'    { RBRACE }
+  
+  (* End of file *)
+  | eof    { EOF }
+  
+  (* Invalid character *)
+  | _ as c  {
       let pos = lexbuf.lex_curr_p in
       failwith (Printf.sprintf "Illegal character '%c' at line %d, column %d"
-        c pos.pos_lnum (pos.pos_cnum - pos.pos_bol))
-  }
+        c pos.pos_lnum (pos.pos_cnum - pos.pos_bol)) }
 
+(* Comment handling rule *)
 and comment = parse
-  | "*/" { read_token lexbuf }
-  | eof  { failwith "Unterminated comment" }
-  | _    { comment lexbuf }
+  | "*/"   { token lexbuf }        (* End of comment *)
+  | '\n'   { new_line lexbuf; comment lexbuf }  (* Count lines in comments *)
+  | _      { comment lexbuf }      (* Any other char in comment *)
+  | eof    { failwith "Unterminated comment" }
