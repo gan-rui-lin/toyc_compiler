@@ -4,9 +4,19 @@ type typ =
   | TVoid (* 空类型 *)
 
 type bin_op =
-  | Add | Sub | Mul | Div | Mod
-  | Eq | Neq | Less | Leq | Greater
-  | Land | Lor
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | Mod
+  | Eq
+  | Neq
+  | Less
+  | Leq
+  | Greater
+  | Geq
+  | Land
+  | Lor
 
 type un_op =
   | Not
@@ -19,7 +29,6 @@ type expr =
   | ID of string
   | Number of int
   | Call of string * expr list
-
 
 (* 语句 *)
 type stmt =

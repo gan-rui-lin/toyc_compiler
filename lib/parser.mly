@@ -96,6 +96,7 @@ expr:
     | expr PLUS expr  { Binop (Add, $1, $3) }
     | expr MINUS expr { Binop (Sub, $1, $3) }
     | expr LE expr { Binop (Leq, $1, $3) }
+    | expr GE expr { Binop (Geq, $1, $3) }
     | expr GT expr { Binop (Greater, $1, $3) }
     | expr LT expr { Binop (Less, $1, $3) }
     | expr EQ expr { Binop (Eq, $1, $3) }
