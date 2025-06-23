@@ -30,8 +30,10 @@ let () =
   let () = Printexc.record_backtrace true in
 
   let args = Array.to_list Sys.argv |> List.tl in (* Drop argv[0] *)
+  let option_flags = ["--print_ast"; "--print_ir"] in
   let print_ast = List.exists ((=) "--print_ast") args in
-  let args = List.filter ((<>) "--print_ast") args in
+  let print_ir  = List.exists ((=) "--print_ir" ) args in
+  let args = List.filter (fun s -> not (List.mem s option_flags)) args in
   match args with
   | [input_file] ->
       (* 只提供了输入文件，用于 --print_ast 或者调试 *)
@@ -51,6 +53,10 @@ let () =
       in
       if print_ast then (
         Printf.printf "%s\n" (Print_ast.string_of_comp_unit ast);
+      );
+      let ir = AstToIR.program_to_ir ast in
+      if print_ir then (
+        Print_ir.print_ir_program ir;
       );
       close_in ic
 
