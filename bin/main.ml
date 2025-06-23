@@ -1,14 +1,11 @@
 open Compilerlib
-open Typechecker
-open Big_step_evaluation
-open Small_step_evaluation
 open Ast
 
 (* 对 statement 里面的 expression 进行一条一条执行 *)
-let parse_stmt (s : string) : stmt =
+let parse_stmt (s : string) : func_def list =
   let lexbuf = Lexing.from_string s in
   try
-    Parser.program Lexer.read lexbuf (* 解析为表达式树 *)
+    Parser.comp_unit Lexer.read_token lexbuf (* 解析为表达式树 *)
   with
   | Parsing.Parse_error ->
       (* 实验性功能, 可能有一个 token 的判断误差 *)
@@ -20,38 +17,21 @@ let parse_stmt (s : string) : stmt =
         line col token;
       exit 1
 
-(* lexing  -> 
-   parsing -> 
-   execute all expressions and converting the result to a string sequentially *)
-let interp (s : string) : string list = 
-  let s = parse_stmt s in
-  match s with
-  | StmtList stmtList -> 
-    let helper = (fun s -> s |> typecheck |> eval |> string_of_expr) in
-    List.map helper stmtList 
 
-(* lexing  -> 
-   parsing -> 
-   execute all expressions and converting the result to a string sequentially *)
-let interp_big (s : string) : string list = 
-  let s = parse_stmt s in
-  match s with
-  | StmtList stmtList -> 
-    let helper = (fun s -> s |> typecheck |> eval_big |> string_of_expr) in
-    List.map helper stmtList
-
-(* ANSI colors *)
+(* ANSI colors
 let green s = "\027[32m" ^ s ^ "\027[0m"
 let red s = "\027[31m" ^ s ^ "\027[0m"
 
 (* Padding helper *)
 let pad_right s len =
-  s ^ String.make (max 0 (len - String.length s)) ' '
+  s ^ String.make (max 0 (len - String.length s)) ' ' *)
 
 let () =
   let () = Printexc.record_backtrace true in
 
-  let read_file filename =
+  Printf.printf "Hello world\n"
+
+  (* let read_file filename =
     let ic = open_in filename in
     let content = really_input_string ic (in_channel_length ic) in
     close_in ic;
@@ -65,8 +45,8 @@ let () =
   let file_content = read_file filename in
   let standard_output = String.split_on_char '\n' (read_file standard_file) |> List.filter (fun x -> x <> "") in
 
-  let res_small = interp file_content in   (* small-step *)
-  let res_big = interp_big file_content in (* big-step *)
+  (* let res_small = interp file_content in   (* small-step *)
+  let res_big = interp_big file_content in big-step *)
 
   let max_len = List.fold_left max 5 (List.map String.length (res_small @ res_big @ standard_output)) in
   let pad = pad_right in
@@ -93,4 +73,4 @@ let () =
       print_lines (i + 1)
   in
   print_lines 0;
-  Printf.printf "%s\n" (String.make (max_len * 3 + 10) '-')
+  Printf.printf "%s\n" (String.make (max_len * 3 + 10) '-') *)

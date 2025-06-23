@@ -4,6 +4,7 @@ open Ast
 
 %token <string> ID
 %token <int> NUMBER
+%token IFX // 用于优先 IF-ELSE 移入而非规约
 %token INT VOID IF ELSE WHILE BREAK CONTINUE RETURN
 %token PLUS MINUS TIMES DIV MOD
 %token EQ NEQ LE GE LT GT
@@ -14,6 +15,8 @@ open Ast
 %token LBRACE RBRACE
 %token EOF
 
+%nonassoc IFX
+%nonassoc ELSE
 %left LOR
 %left LAND
 %nonassoc EQ NEQ
@@ -69,7 +72,7 @@ stmt:
   | expr_stmt                { ExprStmt $1 }
   | decl_stmt                { $1 }
   | ID ASSIGN expr SEMI      { Assign ($1, $3) }
-  | IF LPAREN expr RPAREN stmt %prec LOR
+  | IF LPAREN expr RPAREN stmt %prec IFX
       { If ($3, $5, None) }
   | IF LPAREN expr RPAREN stmt ELSE stmt
       { If ($3, $5, Some $7) }
