@@ -4,11 +4,10 @@ int add(int a,int b)
 }
 int main() {
     int a = 10;
-    int b = 20;
-    if (a < 1) {
-        int c = a + b;
-        return c;
+    int b = 5;
+    while (a > 0) {
+        a = a - 1;
+        a=add(a,b);
     }
-    if (a >= 1) a = 2;
     return 0;
 }
