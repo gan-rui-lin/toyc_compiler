@@ -7,7 +7,7 @@ let string_of_typ = function
 let string_of_binop = function
   | Add -> "+" | Sub -> "-" | Mul -> "*"
   | Div -> "/" | Mod -> "%"
-  | Eq -> "==" | Neq -> "!=" | Less -> "<"
+  | Eq -> "==" | Neq -> "!=" | Less -> "<" | Geq -> ">="
   | Leq -> "<=" | Greater -> ">" | Land -> "&&" | Lor -> "||"
 
 let string_of_unop = function
