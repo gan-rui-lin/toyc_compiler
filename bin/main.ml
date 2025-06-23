@@ -88,7 +88,7 @@ let () =
   | _ ->
       prerr_endline "用法:";
       prerr_endline "  dune exec toyc_compiler -- input.tc [output.s]";
-      prerr_endline "  dune exec toyc_compiler -- --print_ast input.tc";
+      prerr_endline "  dune exec toyc_compiler -- [--print_ast] [--print_ir] input.tc";
       exit 1
 
 
