@@ -18,18 +18,29 @@ let parse_stmt (s : string) : func_def list =
       exit 1
 
 
-(* ANSI colors
+(* ANSI colors *)
 let green s = "\027[32m" ^ s ^ "\027[0m"
 let red s = "\027[31m" ^ s ^ "\027[0m"
 
 (* Padding helper *)
 let pad_right s len =
-  s ^ String.make (max 0 (len - String.length s)) ' ' *)
+  s ^ String.make (max 0 (len - String.length s)) ' '
 
 let () =
   let () = Printexc.record_backtrace true in
 
-  Printf.printf "Hello world\n"
+  let args = Array.to_list Sys.argv |> List.tl in
+  let print_ast = List.exists ((=) "--print_ast") args in
+  let args = List.filter ((<>) "--print_ast") args in
+  match args with
+  | [input_file; output_file] ->
+      if print_ast then
+        Printf.printf "打印 AST: %s\n" input_file;
+      Printf.printf "输入文件: %s\n输出文件: %s\n" input_file output_file
+  | _ ->
+      prerr_endline "用法: toyc_compiler [--print_ast] input.toy output.s";
+      exit 1
+
 
   (* let read_file filename =
     let ic = open_in filename in
