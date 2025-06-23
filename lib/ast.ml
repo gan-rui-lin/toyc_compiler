@@ -3,35 +3,23 @@ type typ =
   | TInt (* 整数类型 *)
   | TVoid (* 空类型 *)
 
-(* 一元运算符 *)
-type unary_op =
-  | Pos (* 正号 + *)
-  | Neg (* 负号 - *)
-  | Not (* 逻辑非 ! *)
+type bin_op =
+  | Add | Sub | Mul | Div | Mod
+  | Eq | Neq | Less | Leq | Greater
+  | Land | Lor
 
-(* 关系运算符 *)
-type rel_op =
-  | Eq (* == *)
-  | Ne (* != *)
-  | Lt (* < *)
-  | Gt (* > *)
-  | Le (* <= *)
-  | Ge (* >= *)
+type un_op =
+  | Not
+  | Plus
+  | Minus
 
-(* 表达式 *)
 type expr =
-  | LOr of expr * expr (* 逻辑或 || *)
-  | LAnd of expr * expr (* 逻辑与 && *)
-  | RelBinary of expr * rel_op * expr (* 关系运算 *)
-  | Add of expr * expr (* 加法 + *)
-  | Sub of expr * expr (* 减法 - *)
-  | Mul of expr * expr (* 乘法 * *)
-  | Div of expr * expr (* 除法 / *)
-  | Mod of expr * expr (* 取模 % *)
-  | UnaryOp of unary_op * expr (* 一元运算 *)
-  | ID of string (* 标识符 *)
-  | Number of int (* 整数常量 *)
-  | Call of string * expr list (* 函数调用 *)
+  | Binop of bin_op * expr * expr
+  | Unop of un_op * expr
+  | ID of string
+  | Number of int
+  | Call of string * expr list
+
 
 (* 语句 *)
 type stmt =

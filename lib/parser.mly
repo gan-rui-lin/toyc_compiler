@@ -19,11 +19,10 @@ open Ast
 %nonassoc ELSE (* 确保解析优先移入 ELSE *)
 %left LOR
 %left LAND
-%nonassoc EQ NEQ
-%nonassoc LT GT LE GE
+%nonassoc LT GT LE GE EQ NEQ
 %left PLUS MINUS
 %left TIMES DIV MOD
-%right NOT UMINUS
+%right NOT UOP_MINUS UOP_PLUS
 
 /* Start symbol */
 %start comp_unit
@@ -91,41 +90,22 @@ stmt:
 
 /* Expression hierarchy */
 expr:
-  | l_or_expr   { $1 }
-
-l_or_expr:
-  | l_and_expr   { $1 }
-  | l_or_expr LOR l_and_expr   { LOr ($1, $3) }
-
-l_and_expr:
-  | rel_expr   { $1 }
-  | l_and_expr LAND rel_expr   { LAnd ($1, $3) }
-
-rel_expr:
-  | add_expr   { $1 }
-  | rel_expr EQ add_expr   { RelBinary ($1, Eq, $3) }
-  | rel_expr NEQ add_expr   { RelBinary ($1, Ne, $3) }
-  | rel_expr LT add_expr   { RelBinary ($1, Lt, $3) }
-  | rel_expr GT add_expr   { RelBinary ($1, Gt, $3) }
-  | rel_expr LE add_expr   { RelBinary ($1, Le, $3) }
-  | rel_expr GE add_expr   { RelBinary ($1, Ge, $3) }
-
-add_expr:
-  | mul_expr   { $1 }
-  | add_expr PLUS mul_expr   { Add ($1, $3) }
-  | add_expr MINUS mul_expr   { Sub ($1, $3) }
-
-mul_expr:
-  | unary_expr   { $1 }
-  | mul_expr TIMES unary_expr   { Mul ($1, $3) }
-  | mul_expr DIV unary_expr   { Div ($1, $3) }
-  | mul_expr MOD unary_expr   { Mod ($1, $3) }
-
-unary_expr:
-  | primary   { $1 }
-  | PLUS unary_expr   %prec UMINUS   { UnaryOp (Pos, $2) }
-  | MINUS unary_expr   %prec UMINUS  { UnaryOp (Neg, $2) }
-  | NOT unary_expr   { UnaryOp (Not, $2) }
+    | expr TIMES expr { Binop (Mul, $1, $3) }
+    | expr DIV expr   { Binop (Div, $1, $3) }
+    | expr MOD expr   { Binop (Mod, $1, $3)}
+    | expr PLUS expr  { Binop (Add, $1, $3) }
+    | expr MINUS expr { Binop (Sub, $1, $3) }
+    | expr LE expr { Binop (Leq, $1, $3) }
+    | expr GT expr { Binop (Greater, $1, $3) }
+    | expr LT expr { Binop (Less, $1, $3) }
+    | expr EQ expr { Binop (Eq, $1, $3) }
+    | expr NEQ expr { Binop (Neq, $1, $3) }
+    | expr LAND expr { Binop (Land, $1, $3) }
+    | expr LOR expr { Binop (Lor, $1, $3) }
+    | NOT expr { Unop (Not, $2) }
+    | MINUS expr { Unop (Minus, $2)} %prec UOP_MINUS
+    | PLUS expr { Unop (Plus, $2)} %prec UOP_PLUS
+    | primary { $1 }
 
 primary:
   | ID   { ID $1 }
