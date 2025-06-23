@@ -5,7 +5,7 @@ type typ =
 
 type bin_op =
   | Add | Sub | Mul | Div | Mod
-  | Eq | Neq | Less | Leq | Greater
+  | Eq | Neq | Less | Leq | Greater | Geq
   | Land | Lor
 
 type un_op =
