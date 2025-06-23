@@ -77,7 +77,7 @@ stmt:
   | ID ASSIGN expr SEMI   { Assign ($1, $3) }
   | INT ID SEMI   { Decl ($2, None) }  /* Declaration without initialization */
   | INT ID ASSIGN expr SEMI   { Decl ($2, Some $4) }
-  | IF LPAREN expr RPAREN stmt %prec LOR
+  | IF LPAREN expr RPAREN stmt %prec IFX
       { If ($3, $5, None) }
   | IF LPAREN expr RPAREN stmt ELSE stmt
       { If ($3, $5, Some $7) }

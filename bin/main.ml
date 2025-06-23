@@ -44,7 +44,7 @@ let () =
           exit 1
       in
       if print_ast then (
-        Printf.printf "%s" (Print_ast.string_of_comp_unit ast);
+        Printf.printf "%s\n" (Print_ast.string_of_comp_unit ast);
       );
       close_in ic
 
@@ -60,7 +60,7 @@ let () =
           exit 1
       in
       if print_ast then (
-        Printf.printf "%s" (Print_ast.string_of_comp_unit ast);
+        Printf.printf "%s\n" (Print_ast.string_of_comp_unit ast);
       );
       (* 假设这里你未来要写代码生成逻辑 *)
       (* Codegen.emit oc ast; *)
