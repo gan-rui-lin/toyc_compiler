@@ -40,7 +40,13 @@ let () =
       let ast =
         try Parser.comp_unit Lexer.token lexbuf
         with _ ->
-          prerr_endline "Parse error";
+          (* 实验性功能, 可能有一个 token 的判断误差 *)
+          let pos = lexbuf.Lexing.lex_curr_p in (* 停在报错的 pos 上 *)
+          let line = pos.Lexing.pos_lnum in (* 从 1 开始编号 *)
+          let col = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in (* 从 1 开始编号 *)
+          let token = Lexing.lexeme lexbuf in
+          Printf.eprintf "Syntax error at line %d, column %d: unexpected token '%s'\n"
+            line col token;
           exit 1
       in
       if print_ast then (
@@ -56,8 +62,14 @@ let () =
       let ast =
         try Parser.comp_unit Lexer.token lexbuf
         with _ ->
-          prerr_endline "Parse error";
-          exit 1
+        (* 实验性功能, 可能有一个 token 的判断误差 *)
+        let pos = lexbuf.Lexing.lex_curr_p in (* 停在报错的 pos 上 *)
+        let line = pos.Lexing.pos_lnum in (* 从 1 开始编号 *)
+        let col = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in (* 从 1 开始编号 *)
+        let token = Lexing.lexeme lexbuf in
+        Printf.eprintf "Syntax error at line %d, column %d: unexpected token '%s'\n"
+          line col token;
+        exit 1
       in
       if print_ast then (
         Printf.printf "%s\n" (Print_ast.string_of_comp_unit ast);
