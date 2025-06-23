@@ -1,83 +1,139 @@
-// <stmt>      ::= 
-//               | <expr> ";" <stmt>                          (* 表达式语句 *)
-//               | <expr>
-
-// <expr>      ::= <literal>
-//               | <identifier>
-//               | "(" <binary-op> <expr> <expr> ")"   (* 二元运算 *)
-//               | "(" <unary-op> <expr> ")"           (* 一元运算 *)
-//               | "if" <expr> "then" <expr> "else" <expr>  (* 条件语句 *)
-
-// <literal>   ::= <integer> | <boolean>
-// <integer>   ::= [0-9]+
-// <boolean>   ::= "true" | "false"
-// <identifier>::= [a-zA-Z_][a-zA-Z0-9_]*
-
-// <binary-op> ::= "+" | "-" | "*" | "/"     (* 算术运算 *)
-//               | "==" | "!=" | "<" | ">"   (* 比较运算 *)
-//               | "&&" | "||"               (* 逻辑运算 *)
-
-// <unary-op>  ::= "!" | "-"                     (* 逻辑非, 负号*)
-
 %{
-    open Ast
+open Ast
 %}
 
-%token <int> INT
 %token <string> ID
-%token TRUE FALSE
-%token PLUS MINUS TIMES DIV LEQ EOF
+%token <int> NUMBER
+%token INT VOID IF ELSE WHILE BREAK CONTINUE RETURN
+%token PLUS MINUS TIMES DIV MOD
+%token EQ NEQ LE GE LT GT
+%token LAND LOR NOT
+%token ASSIGN
+%token SEMI COMMA
 %token LPAREN RPAREN
-%token IF THEN ELSE
-%token LET EQUALS IN
-%token SEMICOLON
-%token EQUAL NOTEQUAL GREATER LESS LAND LOR NOT
+%token LBRACE RBRACE
+%token EOF
 
-%nonassoc EQUALS (* 不存在结合性的说法 *)
-%nonassoc IN 
-%nonassoc ELSE
-
-%left LAND LOR
-%nonassoc LEQ EQUAL NOTEQUAL GREATER LESS (* 优先级低于算术运算，高于 else *)
-
+%left LOR
+%left LAND
+%nonassoc EQ NEQ
+%nonassoc LT GT LE GE
 %left PLUS MINUS
-%left TIMES DIV
-%right NOT UOP_MINUS
+%left TIMES DIV MOD
+%right NOT UMINUS
 
-%start program
-%type <Ast.stmt> program
+%start comp_unit
+%type <Ast.comp_unit> comp_unit
+
 %%
 
-program:
-    stmts EOF { $1 }
-;
+comp_unit:
+  | func_def_list EOF { $1 }
 
-stmts:
-    | stmt_list { StmtList ($1) }
+func_def_list:
+  | func_def                    { [$1] }
+  | func_def_list func_def      { $1 @ [$2] }
+
+func_def:
+  | type_spec ID LPAREN param_list_opt RPAREN block
+      {
+        {
+          ret_type = $1;
+          func_name = $2;
+          params = $4;
+          body = $6;
+        }
+      }
+
+type_spec:
+  | INT   { TInt }
+  | VOID  { TVoid }
+
+param_list_opt:
+  | /* empty */       { [] }
+  | param_list        { $1 }
+
+param_list:
+  | INT ID                      { [$2] }
+  | param_list COMMA INT ID     { $1 @ [$4] }
+
+block:
+  | LBRACE stmt_list RBRACE     { $2 }
 
 stmt_list:
-    | expr SEMICOLON stmt_list { $1 :: $3 }
-    | expr                     { [$1] }
+  | /* empty */      { [] }
+  | stmt_list stmt   { $1 @ [$2] }
+
+stmt:
+  | block                    { Block $1 }
+  | expr_stmt                { ExprStmt $1 }
+  | decl_stmt                { $1 }
+  | ID ASSIGN expr SEMI      { Assign ($1, $3) }
+  | IF LPAREN expr RPAREN stmt %prec LOR
+      { If ($3, $5, None) }
+  | IF LPAREN expr RPAREN stmt ELSE stmt
+      { If ($3, $5, Some $7) }
+  | WHILE LPAREN expr RPAREN stmt
+      { While ($3, $5) }
+  | BREAK SEMI               { Break }
+  | CONTINUE SEMI            { Continue }
+  | RETURN expr SEMI         { Return (Some $2) }
+  | RETURN SEMI              { Return None }
+
+decl_stmt:
+  | INT ID SEMI               { Decl ($2, None) }
+  | INT ID ASSIGN expr SEMI   { Decl ($2, Some $4) }
+
+expr_stmt:
+  | expr SEMI                 { $1 }
 
 expr:
-    | INT { Int $1 }
-    | ID { Var $1 }
-    | TRUE { Bool (true) }
-    | FALSE { Bool (false) }
-    | expr TIMES expr { Binop (Mul, $1, $3) }
-    | expr DIV expr   { Binop (Div, $1, $3) }
-    | expr PLUS expr  { Binop (Add, $1, $3) }
-    | expr MINUS expr { Binop (Sub, $1, $3) }
-    | expr LEQ expr { Binop (Leq, $1, $3) }
-    | expr GREATER expr { Binop (Greater, $1, $3) }
-    | expr LESS expr { Binop (Less, $1, $3) }
-    | expr EQUAL expr { Binop (Eq, $1, $3) }
-    | expr NOTEQUAL expr { Binop (Neq, $1, $3) }
-    | expr LAND expr { Binop (Land, $1, $3) }
-    | expr LOR expr { Binop (Lor, $1, $3) }
-    | NOT expr { Unop (Not, $2) }
-    | MINUS expr { Unop (Minus, $2)} %prec UOP_MINUS
-    | IF expr THEN expr ELSE expr { If ($2, $4, $6) }
-    | LET ID EQUALS expr IN expr { Let($2, $4, $6) }
-    | LPAREN expr RPAREN { $2 }
-;
+  | expr LOR land_expr        { LOr ($1, $3) }
+  | land_expr                 { $1 }
+
+land_expr:
+  | land_expr LAND eq_expr    { LAnd ($1, $3) }
+  | eq_expr                   { $1 }
+
+eq_expr:
+  | rel_expr EQ rel_expr      { RelBinary ($1, Eq, $3) }
+  | rel_expr NEQ rel_expr     { RelBinary ($1, Ne, $3) }
+  | rel_expr                  { $1 }
+
+rel_expr:
+  | add_expr LT add_expr      { RelBinary ($1, Lt, $3) }
+  | add_expr GT add_expr      { RelBinary ($1, Gt, $3) }
+  | add_expr LE add_expr      { RelBinary ($1, Le, $3) }
+  | add_expr GE add_expr      { RelBinary ($1, Ge, $3) }
+  | add_expr                  { $1 }
+
+add_expr:
+  | add_expr PLUS mul_expr    { Add ($1, $3) }
+  | add_expr MINUS mul_expr   { Sub ($1, $3) }
+  | mul_expr                  { $1 }
+
+mul_expr:
+  | mul_expr TIMES unary_expr { Mul ($1, $3) }
+  | mul_expr DIV unary_expr   { Div ($1, $3) }
+  | mul_expr MOD unary_expr   { Mod ($1, $3) }
+  | unary_expr                { $1 }
+
+unary_expr:
+  | NOT unary_expr            { UnaryOp (Not, $2) }
+  | MINUS unary_expr          { UnaryOp (Neg, $2) }
+  | PLUS unary_expr           { UnaryOp (Pos, $2) }
+  | primary                   { $1 }
+
+primary:
+  | ID                        { Primary (ID $1) }
+  | NUMBER                    { Primary (Number $1) }
+  | ID LPAREN args_opt RPAREN { Primary (Call ($1, $3)) }
+  | LPAREN expr RPAREN        { $2 }
+
+args_opt:
+  | /* empty */     { [] }
+  | args            { $1 }
+
+args:
+  | expr                      { [$1] }
+  | args COMMA expr           { $1 @ [$3] }

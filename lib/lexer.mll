@@ -1,44 +1,71 @@
 {
-    open Parser
+open Parser  (* token 类型在 parser.mly 中定义 *)
+open Lexing
+
+let reserved = [
+  ("int", INT);
+  ("void", VOID);
+  ("if", IF);
+  ("else", ELSE);
+  ("while", WHILE);
+  ("break", BREAK);
+  ("continue", CONTINUE);
+  ("return", RETURN);
+]
 }
+let digit = ['0'-'9']
+let nondigit = ['A'-'Z' 'a'-'z' '_']
+let ident = (nondigit)(nondigit | digit)*
+let number = '-'? ( '0' | ['1'-'9'] digit* )
 
-rule read = parse 
-    | [' ' '\t']     { read lexbuf }
-    | '\n'           {
-        (* 告诉 lexbuf：换行了 用于调试定位 Parse_error 发生的位置 *)
-        let pos = lexbuf.lex_curr_p in (* pos 指向 \n 的下一个位置 *)
-        let new_pos = { pos with
-            Lexing.pos_lnum = pos.Lexing.pos_lnum + 1;
-            Lexing.pos_bol = pos.Lexing.pos_cnum;
-        } in
-        lexbuf.lex_curr_p <- new_pos;
-        read lexbuf
-        }
-    | ['0'-'9']+ as num { INT (int_of_string num) }
-    | '+' { PLUS }
-    | '-' { MINUS }
-    | '*' { TIMES }
-    | '/' { DIV }
-    | "<=" { LEQ }
-    | "<" { LESS }
-    | ">" { GREATER }
-    | '(' { LPAREN }
-    | ')' { RPAREN }
-    | "if" { IF }
-    | "then" { THEN }
-    | "else" { ELSE }
-    | "let" { LET }
-    | "=" { EQUALS }
-    | "in" { IN }
-    | "true" { TRUE }
-    | "false" { FALSE }
-    | ";" { SEMICOLON }
-    | "==" { EQUAL }
-    | "!=" { NOTEQUAL }
-    | "&&" { LAND }
-    | "||" { LOR }
-    | '!' { NOT }
-    | eof { EOF }
-    | ['a'-'z' 'A'-'Z' '_']['a'-'z' 'A'-'Z' '0'-'9' '_']* as id { ID id }
+rule read_token = parse
+  | [' ' '\t' '\r' '\n']  { read_token lexbuf }  (* 忽略空白 *)
 
-    | _ { failwith "Invalid character" }
+  (* 单行注释 *)
+  | "//" [^ '\n']* '\n'   { read_token lexbuf }
+
+  (* 多行注释 *)
+  | "/*"                  { comment lexbuf }
+ (* 关键词或ID *)
+  | ident ->
+    let id = lexeme lexbuf in
+    (try List.assoc id reserved
+     with Not_found -> ID id)
+
+  (* 整数常量 *)
+  | number as n -> NUMBER (int_of_string n)
+
+  (* 运算符和符号 *)
+  | "+"  { PLUS }
+  | "-"  { MINUS }
+  | "*"  { TIMES }
+  | "/"  { DIV }
+  | "%"  { MOD }
+  | "==" { EQ }
+  | "!=" { NEQ }
+  | "<=" { LE }
+  | ">=" { GE }
+  | "<"  { LT }
+  | ">"  { GT }
+  | "&&" { LAND }
+  | "||" { LOR }
+  | "="  { ASSIGN }
+  | ";"  { SEMI }
+  | ","  { COMMA }
+  | "("  { LPAREN }
+  | ")"  { RPAREN }
+  | "{"  { LBRACE }
+  | "}"  { RBRACE }
+  | "!"  { NOT }
+
+  | eof { EOF }
+
+  | _ as c ->
+      let pos = lexbuf.lex_curr_p in
+      failwith (Printf.sprintf "Illegal character '%c' at line %d, column %d"
+        c pos.pos_lnum (pos.pos_cnum - pos.pos_bol))
+
+and comment = parse
+  | "*/" -> read_token lexbuf
+  | eof -> failwith "Unterminated comment"
+  | _    -> comment lexbuf
