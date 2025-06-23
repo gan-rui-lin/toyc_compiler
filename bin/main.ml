@@ -32,7 +32,6 @@ let () =
   let args = Array.to_list Sys.argv |> List.tl in (* Drop argv[0] *)
   let print_ast = List.exists ((=) "--print_ast") args in
   let args = List.filter ((<>) "--print_ast") args in
-
   match args with
   | [input_file] ->
       (* 只提供了输入文件，用于 --print_ast 或者调试 *)
@@ -45,7 +44,7 @@ let () =
           exit 1
       in
       if print_ast then (
-        (* Print_ast.print ast; *)
+        Printf.printf "%s" (Print_ast.string_of_comp_unit ast);
       );
       close_in ic
 
@@ -61,7 +60,7 @@ let () =
           exit 1
       in
       if print_ast then (
-        (* Print_ast.print ast; *)
+        Printf.printf "%s" (Print_ast.string_of_comp_unit ast);
       );
       (* 假设这里你未来要写代码生成逻辑 *)
       (* Codegen.emit oc ast; *)
