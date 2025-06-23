@@ -2,10 +2,10 @@ open Compilerlib
 open Ast
 
 (* 对 statement 里面的 expression 进行一条一条执行 *)
-let parse_stmt (s : string) : func_def list =
+let parse_program (s : string) : func_def list =
   let lexbuf = Lexing.from_string s in
   try
-    Parser.comp_unit Lexer.read_token lexbuf (* 解析为表达式树 *)
+    Parser.comp_unit Lexer.token lexbuf (* 解析为表达式树 *)
   with
   | Parsing.Parse_error ->
       (* 实验性功能, 可能有一个 token 的判断误差 *)
@@ -29,17 +29,51 @@ let pad_right s len =
 let () =
   let () = Printexc.record_backtrace true in
 
-  let args = Array.to_list Sys.argv |> List.tl in
+  let args = Array.to_list Sys.argv |> List.tl in (* Drop argv[0] *)
   let print_ast = List.exists ((=) "--print_ast") args in
   let args = List.filter ((<>) "--print_ast") args in
+
   match args with
+  | [input_file] ->
+      (* 只提供了输入文件，用于 --print_ast 或者调试 *)
+      let ic = open_in input_file in
+      let lexbuf = Lexing.from_channel ic in
+      let ast =
+        try Parser.comp_unit Lexer.token lexbuf
+        with _ ->
+          prerr_endline "Parse error";
+          exit 1
+      in
+      if print_ast then (
+        (* Print_ast.print ast; *)
+      );
+      close_in ic
+
   | [input_file; output_file] ->
-      if print_ast then
-        Printf.printf "打印 AST: %s\n" input_file;
-      Printf.printf "输入文件: %s\n输出文件: %s\n" input_file output_file
+      (* 提供了输入和输出文件 *)
+      let ic = open_in input_file in
+      let oc = open_out output_file in
+      let lexbuf = Lexing.from_channel ic in
+      let ast =
+        try Parser.comp_unit Lexer.token lexbuf
+        with _ ->
+          prerr_endline "Parse error";
+          exit 1
+      in
+      if print_ast then (
+        (* Print_ast.print ast; *)
+      );
+      (* 假设这里你未来要写代码生成逻辑 *)
+      (* Codegen.emit oc ast; *)
+      close_in ic;
+      close_out oc
+
   | _ ->
-      prerr_endline "用法: toyc_compiler [--print_ast] input.toy output.s";
+      prerr_endline "用法:";
+      prerr_endline "  dune exec toyc_compiler -- input.tc [output.s]";
+      prerr_endline "  dune exec toyc_compiler -- --print_ast input.tc";
       exit 1
+
 
 
   (* let read_file filename =

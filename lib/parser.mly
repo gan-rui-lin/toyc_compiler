@@ -5,7 +5,7 @@ open Ast
 /* Tokens defined in lexer */
 %token <string> ID
 %token <int> NUMBER
-%token INT VOID IF ELSE WHILE BREAK CONTINUE RETURN
+%token INT VOID IF IFX ELSE WHILE BREAK CONTINUE RETURN
 %token PLUS MINUS TIMES DIV MOD
 %token EQ NEQ LE GE LT GT
 %token LAND LOR NOT
@@ -15,7 +15,8 @@ open Ast
 %token LBRACE RBRACE
 %token EOF
 
-/* Operator precedence and associativity */
+%nonassoc IFX
+%nonassoc ELSE (* 确保解析优先移入 ELSE *)
 %left LOR
 %left LAND
 %nonassoc EQ NEQ
