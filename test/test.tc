@@ -1,40 +1,38 @@
-int add(int a,int b)
-{
-    return a+b;
+int f(int x) {
+    return x % 3;
 }
+
 int main() {
-    int a = 10;
-    int b = 5;
-    while (a > 0) {
-        a = a - 1;
-        a=add(a,b);
-    }
-    if (a >= 1) a = 2;
-    
-    while (d > 0) {
-        a = a - 1;
-        if(a==3) break;
-        if(b!=3) continue;
-        if((a+b)==5) break;
-        else continue;
-        d=add(a,b);
-        int f=c(a,b,c,d);
-        if(true)
-        {
-            while(!true)
-            {
-                if(true) int a=1;
-                else int b=2;
-            }
-            int c=add(a,b);
-            if(c >= add(c,c)) b=c;
-            else if(c) a=1;
-            else a=2;
+    int i = 0;
+    int j = 0;
+    int sum = 0;
+
+    // 外层 while，用于测试 continue 回到条件检查
+    while (i < 5) {
+        i = i + 1;
+        if (f(i) == 0) {
+            continue;        // 跳回外层 while 条件
         }
-        else {a=a+1;}
+
+        // 内层等价 while，原 for(j=0; j<4; j++) 改写
+        j = 0;
+        while (j < 4) {
+            sum = sum + j;
+            if (sum > 10) {
+                break;       // 跳出内层 while
+            }
+            if (j % 2 == 0) {
+                j = j + 1;
+                continue;    // 跳回内层 while 条件
+            }
+            sum = sum + f(j);
+            j = j + 1;      // 手动步进
+        }
+
+        if (sum > 20) {
+            break;           // 跳出最外层 while
+        }
     }
 
-    return 0;
+    return sum;
 }
-
-

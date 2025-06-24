@@ -6,27 +6,27 @@ open Ir
 (* Map<String, operand> *)
 module Env = Map.Make(String)
 
+(* 翻译上下文：包含当前 env 及循环标签，用于实现 break/continue *)
 type context = {
   env: operand Env.t;
   break_lbl: string option;     (* break 跳转目标 *)
   continue_lbl: string option;  (* continue 跳转目标 *)
 }
 
-(* 临时寄存器生成器 *)
+(* 临时寄存器与标签生成器 *)
 let temp_id = ref 0
 let fresh_temp () =
   let id = !temp_id in
   incr temp_id;
   Reg ("t" ^ string_of_int id)
 
-(* Label 生成器 *)
 let label_id = ref 0
 let fresh_label () =
   let id = !label_id in
   incr label_id;
   "L" ^ string_of_int id
 
-(* 操作符映射 *)
+(* 操作符到字符串映射 *)
 let string_of_binop = function
   | Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/" | Mod -> "%"
   | Eq -> "==" | Neq -> "!=" | Less -> "<" | Leq -> "<="
@@ -44,6 +44,13 @@ type stmt_res =
 (* 将 stmt_res 展平为代码列表 *)
 let flatten = function
   | Normal code | Returned code -> code
+
+(* 检查代码段最后一条是否是 Goto 指定标签或 Return *)
+let ends_with_jump_or_return insts =
+  match List.rev insts with
+  | Goto _ :: _ -> true
+  | Ret _  :: _ -> true
+  | _ -> false
 
 (* 表达式转换：返回目标寄存器和 IR 指令列表 *)
 let rec expr_to_ir (ctx: context) (e: expr) : operand * ir_inst list =
@@ -96,7 +103,6 @@ let rec expr_to_ir (ctx: context) (e: expr) : operand * ir_inst list =
       let rhs, c2 = expr_to_ir ctx e2 in
       let dst = fresh_temp () in
       dst, c1 @ c2 @ [Binop (string_of_binop op, dst, lhs, rhs)]
-
   | Call (f, args) ->
       (* 参数顺序按出现顺序计算 *)
       let codes, ops =
@@ -133,32 +139,28 @@ let rec stmt_to_res (ctx: context) (s: stmt) : stmt_res =
       let v, c = expr_to_ir ctx e in
       Returned (c @ [Ret (Some v)])
 
-  | If (cond, tstmt, Some fstmt) ->
-      let cnd, ccode = expr_to_ir ctx cond in
-      let lthen = fresh_label () and lelse = fresh_label () and lend = fresh_label () in
-      let then_res = stmt_to_res ctx tstmt in
-      let else_res = stmt_to_res ctx fstmt in
-      let then_code = flatten then_res in
-      let else_code = flatten else_res in
-      (* 合并：短路结构中 return 保持位置 *)
-      let code =
-        ccode
-        @ [IfGoto (cnd, lthen); Goto lelse]
-        @ [Label lthen] @ then_code @ [Goto lend]
-        @ [Label lelse] @ else_code @ [Label lend]
-      in
-      (match then_res, else_res with
-       | Returned _, _ | _, Returned _ -> Returned code
-       | _ -> Normal code)
-
-  | If (cond, tstmt, None) ->
-      let cnd, ccode = expr_to_ir ctx cond in
-      let lthen = fresh_label () in
-      let then_res = stmt_to_res ctx tstmt in
-      let then_code = flatten then_res in
-      let code = ccode @ [IfGoto (cnd, lthen)] @ [Label lthen] @ then_code in
-      (match then_res with Returned _ -> Returned code | _ -> Normal code)
-
+  | If(cond,tstmt,Some fstmt)->
+      let cnd,cc=expr_to_ir ctx cond in
+      let lthen=fresh_label() and lelse=fresh_label() and lend=fresh_label() in
+      let then_res=stmt_to_res ctx tstmt and else_res=stmt_to_res ctx fstmt in
+      let raw_then=flatten then_res in
+      let then_code= if ends_with_jump_or_return raw_then then raw_then else raw_then@[Goto lend] in
+      let raw_else=flatten else_res in
+      let else_code= if ends_with_jump_or_return raw_else then raw_else else raw_else@[Goto lend] in
+      let code= cc@[IfGoto(cnd,lthen);Goto lelse]@[Label lthen]@then_code@[Label lelse]@else_code@[Label lend] in
+      (match then_res,else_res with Returned _,_|_,Returned _->Returned code|_->Normal code)
+  | If(cond, tstmt, None) ->
+    let cnd, cc = expr_to_ir ctx cond in
+    let lthen = fresh_label() and lskip = fresh_label() in
+    let then_res = stmt_to_res ctx tstmt in
+    let then_code = flatten then_res in
+    let code =
+      cc
+      @ [IfGoto(cnd, lthen); Goto lskip]
+      @ [Label lthen] @ then_code
+      @ [Label lskip]
+    in
+    (match then_res with Returned _ -> Returned code | _ -> Normal code)
   | While (cond, body) ->
       (* 循环标签 *)
       let lcond = fresh_label () and lbody = fresh_label () and lend = fresh_label () in
