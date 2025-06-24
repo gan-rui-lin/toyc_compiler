@@ -2,6 +2,7 @@
 open Ast
 open Ir
 
+(* Map<String, operand> *)
 module Env = Map.Make(String)
 
 (* 
@@ -65,6 +66,7 @@ let rec stmt_to_ir (env : operand Env.t) (s : stmt) : ir_inst list * operand Env
   | ExprStmt e ->
       let _, code = expr_to_ir env e in
       code, env
+  (* 赋初值 *)
   | Decl (name, Some e) ->
       let op, code = expr_to_ir env e in
       let var = Var name in
@@ -111,16 +113,21 @@ let rec stmt_to_ir (env : operand Env.t) (s : stmt) : ir_inst list * operand Env
       in
       code, env
   | Block stmts ->
+      (* TODO: 识别到 return 应该退出而非继续推导 *)
       List.fold_left (fun (acc_code, acc_env) stmt ->
         let code, new_env = stmt_to_ir acc_env stmt in
         acc_code @ code, new_env
       ) ([], env) stmts
   | Break | Continue ->
+      (* TODO: 不好实现 *)
       failwith "Break/Continue not implemented yet"
 
 (* 函数转换 *)
 let func_to_ir (f : func_def) : ir_func =
+  (* 函数参数作为初始的 env *)
+  (* add <name, Var name> *)
   let env = List.fold_left (fun acc name -> Env.add name (Var name) acc) Env.empty f.params in
+  (* 将 f.body 解析为 Block 并扔给 stmt *)
   let code, _ = stmt_to_ir env (Block f.body) in
   {
     name = f.func_name;

@@ -75,6 +75,7 @@ stmt:
   | SEMI    { Empty }
   | expr SEMI   { ExprStmt $1 }
   | ID ASSIGN expr SEMI   { Assign ($1, $3) }
+  // 其实 toyc 里没有 79 行对应语法
   | INT ID SEMI   { Decl ($2, None) }  /* Declaration without initialization */
   | INT ID ASSIGN expr SEMI   { Decl ($2, Some $4) }
   | IF LPAREN expr RPAREN stmt %prec IFX
