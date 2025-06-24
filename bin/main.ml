@@ -4,38 +4,39 @@ open Ast
 (* 对 statement 里面的 expression 进行一条一条执行 *)
 let parse_program (s : string) : func_def list =
   let lexbuf = Lexing.from_string s in
-  try
-    Parser.comp_unit Lexer.token lexbuf (* 解析为表达式树 *)
-  with
-  | Parsing.Parse_error ->
-      (* 实验性功能, 可能有一个 token 的判断误差 *)
-      let pos = lexbuf.Lexing.lex_curr_p in (* 停在报错的 pos 上 *)
-      let line = pos.Lexing.pos_lnum in (* 从 1 开始编号 *)
-      let col = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in (* 从 1 开始编号 *)
-      let token = Lexing.lexeme lexbuf in
-      Printf.eprintf "Syntax error at line %d, column %d: unexpected token '%s'\n"
-        line col token;
-      exit 1
-
+  try Parser.comp_unit Lexer.token lexbuf (* 解析为表达式树 *)
+  with Parsing.Parse_error ->
+    (* 实验性功能, 可能有一个 token 的判断误差 *)
+    let pos = lexbuf.Lexing.lex_curr_p in
+    (* 停在报错的 pos 上 *)
+    let line = pos.Lexing.pos_lnum in
+    (* 从 1 开始编号 *)
+    let col = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in
+    (* 从 1 开始编号 *)
+    let token = Lexing.lexeme lexbuf in
+    Printf.eprintf "Syntax error at line %d, column %d: unexpected token '%s'\n"
+      line col token;
+    exit 1
 
 (* ANSI colors *)
 let green s = "\027[32m" ^ s ^ "\027[0m"
 let red s = "\027[31m" ^ s ^ "\027[0m"
 
 (* Padding helper *)
-let pad_right s len =
-  s ^ String.make (max 0 (len - String.length s)) ' '
+let pad_right s len = s ^ String.make (max 0 (len - String.length s)) ' '
 
 let () =
   let () = Printexc.record_backtrace true in
 
-  let args = Array.to_list Sys.argv |> List.tl in (* Drop argv[0] *)
-  let option_flags = ["--print_ast"; "--print_ir"] in
-  let print_ast = List.exists ((=) "--print_ast") args in
-  let print_ir  = List.exists ((=) "--print_ir" ) args in
+  let args = Array.to_list Sys.argv |> List.tl in
+  (* Drop argv[0] *)
+  let option_flags = [ "--print_ast"; "--print_ir"; "-block-ir" ] in
+  let print_ast = List.exists (( = ) "--print_ast") args in
+  let print_ir = List.exists (( = ) "--print_ir") args in
+  let block_ir = List.exists (( = ) "-block-ir") args in
   let args = List.filter (fun s -> not (List.mem s option_flags)) args in
   match args with
-  | [input_file] ->
+  | [ input_file ] ->
       (* 只提供了输入文件，用于 --print_ast 或者调试 *)
       let ic = open_in input_file in
       let lexbuf = Lexing.from_channel ic in
@@ -43,24 +44,24 @@ let () =
         try Parser.comp_unit Lexer.token lexbuf
         with _ ->
           (* 实验性功能, 可能有一个 token 的判断误差 *)
-          let pos = lexbuf.Lexing.lex_curr_p in (* 停在报错的 pos 上 *)
-          let line = pos.Lexing.pos_lnum in (* 从 1 开始编号 *)
-          let col = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in (* 从 1 开始编号 *)
+          let pos = lexbuf.Lexing.lex_curr_p in
+          (* 停在报错的 pos 上 *)
+          let line = pos.Lexing.pos_lnum in
+          (* 从 1 开始编号 *)
+          let col = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in
+          (* 从 1 开始编号 *)
           let token = Lexing.lexeme lexbuf in
-          Printf.eprintf "Syntax error at line %d, column %d: unexpected token '%s'\n"
-            line col token;
+          Printf.eprintf
+            "Syntax error at line %d, column %d: unexpected token '%s'\n" line
+            col token;
           exit 1
       in
-      if print_ast then (
-        Printf.printf "%s\n" (Print_ast.string_of_comp_unit ast);
-      );
-      let ir = AstToIR.program_to_ir ast in
-      if print_ir then (
-        Print_ir.print_ir_program ir;
-      );
+      if print_ast then Printf.printf "%s\n" (Print_ast.string_of_comp_unit ast);
+      (* true 表示生成 block IR , false 表示生成 Linear IR *)
+      let ir = AstToIR.program_to_ir ast block_ir in
+      if print_ir then Print_ir.print_ir_program ir;
       close_in ic
-
-  | [input_file; output_file] ->
+  | [ input_file; output_file ] ->
       (* 提供了输入和输出文件 *)
       let ic = open_in input_file in
       let oc = open_out output_file in
@@ -68,32 +69,32 @@ let () =
       let ast =
         try Parser.comp_unit Lexer.token lexbuf
         with _ ->
-        (* 实验性功能, 可能有一个 token 的判断误差 *)
-        let pos = lexbuf.Lexing.lex_curr_p in (* 停在报错的 pos 上 *)
-        let line = pos.Lexing.pos_lnum in (* 从 1 开始编号 *)
-        let col = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in (* 从 1 开始编号 *)
-        let token = Lexing.lexeme lexbuf in
-        Printf.eprintf "Syntax error at line %d, column %d: unexpected token '%s'\n"
-          line col token;
-        exit 1
+          (* 实验性功能, 可能有一个 token 的判断误差 *)
+          let pos = lexbuf.Lexing.lex_curr_p in
+          (* 停在报错的 pos 上 *)
+          let line = pos.Lexing.pos_lnum in
+          (* 从 1 开始编号 *)
+          let col = pos.Lexing.pos_cnum - pos.Lexing.pos_bol + 1 in
+          (* 从 1 开始编号 *)
+          let token = Lexing.lexeme lexbuf in
+          Printf.eprintf
+            "Syntax error at line %d, column %d: unexpected token '%s'\n" line
+            col token;
+          exit 1
       in
-      if print_ast then (
-        Printf.printf "%s\n" (Print_ast.string_of_comp_unit ast);
-      );
+      if print_ast then Printf.printf "%s\n" (Print_ast.string_of_comp_unit ast);
       (* 假设这里你未来要写代码生成逻辑 *)
       (* Codegen.emit oc ast; *)
       close_in ic;
       close_out oc
-
   | _ ->
       prerr_endline "用法:";
       prerr_endline "  dune exec toyc_compiler -- input.tc [output.s]";
-      prerr_endline "  dune exec toyc_compiler -- [--print_ast] [--print_ir] input.tc";
+      prerr_endline
+        "  dune exec toyc_compiler -- [--print_ast] [--print_ir] input.tc";
       exit 1
 
-
-
-  (* let read_file filename =
+(* let read_file filename =
     let ic = open_in filename in
     let content = really_input_string ic (in_channel_length ic) in
     close_in ic;

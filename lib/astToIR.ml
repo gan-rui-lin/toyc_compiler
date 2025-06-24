@@ -4,7 +4,7 @@ open Ast
 open Ir
 
 (* Map<String, operand> *)
-module Env = Map.Make(String)
+module Env = Map.Make (String)
 
 (* 翻译上下文：包含当前 env 及循环标签，用于实现 break/continue *)
 type context = {
@@ -15,12 +15,14 @@ type context = {
 
 (* 临时寄存器与标签生成器 *)
 let temp_id = ref 0
+
 let fresh_temp () =
   let id = !temp_id in
   incr temp_id;
   Reg ("t" ^ string_of_int id)
 
 let label_id = ref 0
+
 let fresh_label () =
   let id = !label_id in
   incr label_id;
@@ -28,13 +30,21 @@ let fresh_label () =
 
 (* 操作符到字符串映射 *)
 let string_of_binop = function
-  | Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/" | Mod -> "%"
-  | Eq -> "==" | Neq -> "!=" | Less -> "<" | Leq -> "<="
-  | Greater -> ">" | Geq -> ">="
-  | Land -> "&&" | Lor -> "||"
+  | Add -> "+"
+  | Sub -> "-"
+  | Mul -> "*"
+  | Div -> "/"
+  | Mod -> "%"
+  | Eq -> "=="
+  | Neq -> "!="
+  | Less -> "<"
+  | Leq -> "<="
+  | Greater -> ">"
+  | Geq -> ">="
+  | Land -> "&&"
+  | Lor -> "||"
 
-let string_of_unop = function
-  | Not -> "!" | Plus -> "+" | Minus -> "-"
+let string_of_unop = function Not -> "!" | Plus -> "+" | Minus -> "-"
 
 (* stmt_to_res 用于处理 return 终止：Normal/Returned 两种结果 *)
 type stmt_res =
@@ -55,7 +65,7 @@ let ends_with_jump_or_return insts =
 (* 表达式转换：返回目标寄存器和 IR 指令列表 *)
 let rec expr_to_ir (ctx: context) (e: expr) : operand * ir_inst list =
   match e with
-  | Number n -> Imm n, []
+  | Number n -> (Imm n, [])
   | ID name ->
       let operand = Env.find name ctx.env in
       operand, []
@@ -219,6 +229,89 @@ let func_to_ir (f: func_def) : ir_func =
   let body_res = stmt_to_res ctx0 (Block f.body) in
   let body_code = flatten body_res in
   { name = f.func_name; args = f.params; body = body_code }
+
+(* 线性IR -> 过程块IR *)
+let partition_blocks (insts : ir_inst list) : ir_block list =
+  let rec split acc curr label insts =
+    match insts with
+    | [] -> (
+        match curr with
+        | [] -> List.rev acc
+        | _ -> failwith "Basic block must end with a terminator")
+    | Label l :: rest ->
+        (* 当前块结束，开启新块 *)
+        let acc' =
+          match curr with
+          | [] -> acc
+          | _ ->
+              let blk =
+                {
+                  label;
+                  insts = List.rev curr;
+                  terminator = TermUnreachable;
+                  (* 临时占位 *)
+                  preds = [];
+                  succs = [];
+                }
+              in
+              blk :: acc
+        in
+        split acc' [] l rest
+    | Goto l :: rest ->
+        let blk =
+          {
+            label;
+            insts = List.rev curr;
+            terminator = TermGoto l;
+            preds = [];
+            succs = [];
+          }
+        in
+        split (blk :: acc) [] (fresh_label ()) rest
+    | IfGoto (cond, l) :: rest ->
+        let l_else = fresh_label () in
+        let blk =
+          {
+            label;
+            insts = List.rev curr;
+            terminator = TermIf (cond, l, l_else);
+            (* 假设 Goto 紧跟后面补全 else *)
+            preds = [];
+            succs = [];
+          }
+        in
+        split (blk :: acc) [] l_else rest
+    | Ret op :: rest ->
+        let blk =
+          {
+            label;
+            insts = List.rev curr;
+            terminator = TermRet op;
+            preds = [];
+            succs = [];
+          }
+        in
+        split (blk :: acc) [] (fresh_label ()) rest
+    | inst :: rest -> split acc (inst :: curr) label rest
+  in
+  split [] [] (fresh_label ()) insts
+
+(* 优化版本的 ir 控制块 *)
+let func_to_ir_o (f : func_def) : ir_func_o =
+  temp_id := 0;
+  label_id := 0;
+  let env =
+    List.fold_left
+      (fun acc name -> Env.add name (Var name) acc)
+      Env.empty f.params
+  in
+  let linear_ir, _ = stmt_to_res env (Block f.body) in
+  let blocks = partition_blocks linear_ir in
+  (* 构建 cfg *)
+  Cfg.build_cfg blocks;
+  { name = f.func_name; args = f.params; blocks }
+
 (* 编译单元转换 *)
-let program_to_ir (cu : comp_unit) : ir_program =
-  List.map func_to_ir cu
+let program_to_ir (cu : comp_unit) (optimize_flag : bool) : ir_program =
+  if optimize_flag then Ir_funcs_o (List.map func_to_ir_o cu)
+  else Ir_funcs (List.map func_to_ir cu)

@@ -2,5 +2,5 @@
  (public_name toyc_compiler)
  (name main)
  (libraries compilerlib)
- (flags (:standard -w -32-27-26-39-8-37))
- )
+ (flags
+  (:standard -w -32-27-26-39-8-37)))

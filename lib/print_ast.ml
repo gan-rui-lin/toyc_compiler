@@ -1,30 +1,33 @@
 open Ast
 
-let string_of_typ = function
-  | TInt -> "int"
-  | TVoid -> "void"
+let string_of_typ = function TInt -> "int" | TVoid -> "void"
 
 let string_of_binop = function
-  | Add -> "+" | Sub -> "-" | Mul -> "*"
-  | Div -> "/" | Mod -> "%"
-  | Eq -> "==" | Neq -> "!=" | Less -> "<" | Geq -> ">="
-  | Leq -> "<=" | Greater -> ">" | Land -> "&&" | Lor -> "||"
+  | Add -> "+"
+  | Sub -> "-"
+  | Mul -> "*"
+  | Div -> "/"
+  | Mod -> "%"
+  | Eq -> "=="
+  | Neq -> "!="
+  | Less -> "<"
+  | Geq -> ">="
+  | Leq -> "<="
+  | Greater -> ">"
+  | Land -> "&&"
+  | Lor -> "||"
 
-let string_of_unop = function
-  | Not -> "!" | Plus -> "+" | Minus -> "-"
+let string_of_unop = function Not -> "!" | Plus -> "+" | Minus -> "-"
 
 let rec string_of_expr = function
   | Number n -> Printf.sprintf "Number(%d)" n
   | ID s -> Printf.sprintf "ID(%s)" s
   | Call (fname, args) ->
-      Printf.sprintf "Call(%s, [%s])"
-        fname
+      Printf.sprintf "Call(%s, [%s])" fname
         (String.concat "; " (List.map string_of_expr args))
   | Binop (op, e1, e2) ->
-      Printf.sprintf "Binop(%s, %s, %s)"
-        (string_of_binop op)
-        (string_of_expr e1)
-        (string_of_expr e2)
+      Printf.sprintf "Binop(%s, %s, %s)" (string_of_binop op)
+        (string_of_expr e1) (string_of_expr e2)
   | Unop (op, e) ->
       Printf.sprintf "Unop(%s, %s)" (string_of_unop op) (string_of_expr e)
 
@@ -40,20 +43,17 @@ let rec string_of_stmt = function
   | If (cond, s1, None) ->
       Printf.sprintf "If(%s, %s)" (string_of_expr cond) (string_of_stmt s1)
   | If (cond, s1, Some s2) ->
-      Printf.sprintf "If(%s, %s, %s)"
-        (string_of_expr cond)
-        (string_of_stmt s1)
+      Printf.sprintf "If(%s, %s, %s)" (string_of_expr cond) (string_of_stmt s1)
         (string_of_stmt s2)
   | While (cond, body) ->
       Printf.sprintf "While(%s, %s)" (string_of_expr cond) (string_of_stmt body)
   | Break -> "Break"
   | Continue -> "Continue"
   | Return None -> "Return"
-  | Return Some e -> Printf.sprintf "Return(%s)" (string_of_expr e)
+  | Return (Some e) -> Printf.sprintf "Return(%s)" (string_of_expr e)
 
 let string_of_func_def f =
-  Printf.sprintf "Function %s(%s) : %s {\n%s\n}"
-    f.func_name
+  Printf.sprintf "Function %s(%s) : %s {\n%s\n}" f.func_name
     (String.concat ", " f.params)
     (string_of_typ f.ret_type)
     (String.concat "\n" (List.map (fun s -> "  " ^ string_of_stmt s) f.body))
