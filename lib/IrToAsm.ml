@@ -118,4 +118,4 @@ let compile_func (f : ir_func) : string =
   prologue ^ param_setup ^ body_code
 
 let compile_program (prog : ir_program) : string =
-  ".text\n\n.global main\n" ^ (List.map compile_func prog |> String.concat "\n")
+  ".text\n.global main\n\n" ^ (List.map compile_func prog |> String.concat "\n")
