@@ -1,6 +1,7 @@
 (* 基本类型定义 *)
 type typ =
-  | TInt (* 整数类型 *)
+  | TInt
+  (* 整数类型 *)
   | TVoid (* 空类型 *)
 
 type bin_op =
@@ -18,10 +19,7 @@ type bin_op =
   | Land
   | Lor
 
-type un_op =
-  | Not
-  | Plus
-  | Minus
+type un_op = Not | Plus | Minus
 
 type expr =
   | Binop of bin_op * expr * expr
@@ -47,12 +45,12 @@ type stmt =
 type param = string (* 参数名（类型固定为int） *)
 
 (* 函数定义 *)
-type func_def =
-  { ret_type : typ (* 返回类型 *)
-  ; func_name : string (* 函数名 *)
-  ; params : param list (* 参数列表 *)
-  ; body : stmt list (* 函数体（语句列表） *)
-  }
+type func_def = {
+  ret_type : typ; (* 返回类型 *)
+  func_name : string; (* 函数名 *)
+  params : param list (* 参数列表 *);
+  body : stmt list (* 函数体（语句列表） *);
+}
 
 (* 编译单元（整个程序） *)
 type comp_unit = func_def list (* 函数定义列表 *)
