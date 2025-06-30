@@ -18,10 +18,10 @@ let reserved = [
 }
 
 (* Regular expression definitions *)
-let digit = ['0'-'9']
+let digit = ['0'-'9']+
 let nondigit = ['a'-'z' 'A'-'Z' '_']
 let ident = nondigit (nondigit | digit)*
-let integer = '-'? ( '0' | ['1'-'9'] digit* )
+(* let integer = '-'? ( '0' | ['1'-'9'] digit* ) *)
 let whitespace = [' ' '\t' '\r']
 
 rule token = parse
@@ -39,7 +39,7 @@ rule token = parse
     }
   
   (* Integer literals *)
-  | integer as n   { NUMBER (int_of_string n) }
+  | digit as n   { NUMBER (int_of_string n) }
   
   (* Operators *)
   | "=="   { EQ }
