@@ -2,7 +2,6 @@
 (* 引入 AST 和 IR 类型 *)
 open Ast
 open Ir
-
 (* Map<String, operand> *)
 module Env = Map.Make (String)
 
@@ -362,10 +361,10 @@ let func_to_ir_o (f : func_def) : ir_func_o =
     | Label _ :: rest_rev -> List.rev rest_rev
     | _ -> body_code
   in
-  let blocks = partition_blocks linear_ir in
-  (* 构建 cfg *)
-  Cfg.build_cfg blocks;
-  { name = f.func_name; args = f.params; blocks }
+  let raw_blocks = partition_blocks linear_ir in
+  (* 构建前驱/后继关系，并剔除空块/重复块 *)
+  let cfg_blocks = Cfg.build_cfg raw_blocks in
+  { name = f.func_name; args = f.params; blocks = cfg_blocks }
 
 (* 编译单元转换 *)
 let program_to_ir (cu : comp_unit) (optimize_flag : bool) : ir_program =
