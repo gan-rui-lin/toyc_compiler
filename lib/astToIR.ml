@@ -1,4 +1,3 @@
-
 (*astToIR.ml*)
 (* 引入 AST 和 IR 类型 *)
 open Ast
@@ -173,7 +172,7 @@ let rec stmt_to_res (ctx : context) (s : stmt) : stmt_res =
       match (then_res, else_res) with
       | Returned _, _ | _, Returned _ -> Returned code
       | _ -> Normal code)
-  | If (cond, tstmt, None) -> (
+  | If (cond, tstmt, None) ->
       let cnd, cc = expr_to_ir ctx cond in
       let lthen = fresh_label () and lskip = fresh_label () in
       let then_res = stmt_to_res ctx tstmt in
@@ -182,7 +181,8 @@ let rec stmt_to_res (ctx : context) (s : stmt) : stmt_res =
         cc
         @ [ IfGoto (cnd, lthen); Goto lskip ]
         @ [ Label lthen ] @ then_code @ [ Label lskip ]
-      in Normal code)
+      in
+      Normal code
   | While (cond, body) ->
       (* 循环标签 *)
       let lcond = fresh_label ()
@@ -249,7 +249,7 @@ let func_to_ir (f : func_def) : ir_func =
   let body_code =
     match List.rev raw_code with
     | Label _ :: rest_rev -> List.rev rest_rev
-    | _                   -> raw_code
+    | _ -> raw_code
   in
   { name = f.func_name; args = f.params; body = body_code }
 
@@ -323,12 +323,19 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
 let func_to_ir_o (f : func_def) : ir_func_o =
   temp_id := 0;
   label_id := 0;
-  let env =
+  let init_env =
     List.fold_left
       (fun acc name -> Env.add name (Var name) acc)
       Env.empty f.params
   in
-  let linear_ir, _ = stmt_to_res env (Block f.body) in
+  let ctx0 = { env = init_env; break_lbl = None; continue_lbl = None } in
+  let body_code = stmt_to_res ctx0 (Block f.body) |> flatten in
+  let linear_ir =
+    (* 额外处理孤立的 label *)
+    match List.rev body_code with
+    | Label _ :: rest_rev -> List.rev rest_rev
+    | _ -> body_code
+  in
   let blocks = partition_blocks linear_ir in
   (* 构建 cfg *)
   Cfg.build_cfg blocks;
