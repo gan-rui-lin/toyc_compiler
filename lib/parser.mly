@@ -16,7 +16,7 @@ open Ast
 %token EOF
 
 %nonassoc IFX
-%nonassoc ELSE (* 确保解析优先移入 ELSE *)
+%nonassoc ELSE 
 %left LOR
 %left LAND
 %nonassoc LT GT LE GE EQ NEQ

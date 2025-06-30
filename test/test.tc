@@ -5,12 +5,12 @@ int f(int x) {
 int main() {
     int i = 0;
     int j = 0;
-    int sum = 0;
+    int sum = i -1;
 
     // 外层 while，用于测试 continue 回到条件检查
     while (i < 5) {
-        i = i + 1;
-        if (f(i) == 0) {
+        i = i-1;
+        if (f(i-1) == 0) {
             continue;        // 跳回外层 while 条件
         }
 

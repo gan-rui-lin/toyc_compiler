@@ -111,17 +111,18 @@ let rec expr_to_ir (ctx : context) (e : expr) : operand * ir_inst list =
       (dst, c1 @ c2 @ [ Binop (string_of_binop op, dst, lhs, rhs) ])
   | Call (f, args) ->
       (* 参数顺序按出现顺序计算 *)
-      let codes, ops =
+      let codes, oprs =
         List.fold_left
-          (fun (acc_c, acc_o) arg ->
-            let o, c = expr_to_ir ctx arg in
-            (acc_c @ c, acc_o @ [ o ]))
+          (fun (acc_code, acc_opr) arg ->
+            let opr, code = expr_to_ir ctx arg in
+            (* 代码和操作 *)
+            (acc_code @ code, acc_opr @ [ opr ]))
           ([], []) args
       in
       let ret = fresh_temp () in
       (* 这里假设每次 Call 之后的结果放到一个新的寄存器里面 *)
       (* 因为是 IR 阶段, 不考虑 rv32 具体的调用规范 *)
-      (ret, codes @ [ Call (ret, f, ops) ])
+      (ret, codes @ [ Call (ret, f, oprs) ])
 
 (* 语句翻译，返回 Normal/Returned，支持块作用域、break/continue、return 提前终止 *)
 let rec stmt_to_res (ctx : context) (s : stmt) : stmt_res =
