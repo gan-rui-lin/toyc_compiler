@@ -37,9 +37,10 @@ let compile_inst (inst : ir_inst) : string =
         | "*" -> "\tmul t0, t1, t2\n"
         | "/" -> "\tdiv t0, t1, t2\n"
         | "%" -> "\trem t0, t1, t2\n"
-        (* TODO 实现 *)
-        | "==" | "!=" | "<=" | ">=" ->
-            "\tsub t0, t1, t2\n\tseqz t0, t0\n" (* 占位实现 *)
+        | "=="-> "\tsub t0, t1, t2\n\tseqz t0, t0\n" 
+        | "!="-> "\tsub t0, t1, t2\n\tsnez t0, t0\n" 
+        | "<="-> "\tsgt t0, t1, t2\n\txori t0, t0, 1\n"
+        | ">="-> "\tslt t0, t1, t2\n\txori t0, t0, 1\n" 
         | "<" -> "\tslt t0, t1, t2\n"
         | ">" -> "\tsgt t0, t1, t2\n"
         | "&&" -> "\tand t0, t1, t2\n"
