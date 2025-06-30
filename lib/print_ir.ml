@@ -44,7 +44,7 @@ let string_of_ir_term = function
   | TermRet None -> "  terminator: return"
   | TermRet (Some op) ->
       Printf.sprintf "  terminator: return %s" (string_of_operand op)
-  | TermUnreachable -> "  terminator: unreachable"
+  | TermSeq l-> Printf.sprintf "  terminator: seqence %s" l
 
 let print_ir_block (b : ir_block) =
   Printf.printf "%s:\n" b.label;

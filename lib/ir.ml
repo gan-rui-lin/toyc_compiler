@@ -24,7 +24,8 @@ type ir_term =
   | TermGoto of string
   | TermIf of operand * string * string
   | TermRet of operand option
-  | TermUnreachable
+  | TermSeq of string
+  (* | TermCall (* 不用管 *) *)
 
 type ir_block = {
   label : string;

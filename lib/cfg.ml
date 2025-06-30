@@ -27,5 +27,5 @@ let build_cfg (blocks : ir_block list) : unit =
           add_succ l1;
           add_succ l2
       | TermRet _ -> () (* 无后继 *)
-      | TermUnreachable -> ())
+      | TermSeq l-> add_succ l)
     blocks
