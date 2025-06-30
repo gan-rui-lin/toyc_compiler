@@ -36,4 +36,30 @@ let print_ir_func (f : ir_func) =
   Printf.printf "function %s(%s):\n" f.name (String.concat ", " f.args);
   List.iter (fun inst -> Printf.printf "  %s\n" (string_of_ir_inst inst)) f.body
 
-let print_ir_program (prog : ir_program) = List.iter print_ir_func prog
+let string_of_ir_term = function
+  | TermGoto l -> Printf.sprintf "  terminator: goto %s" l
+  | TermIf (cond, l1, l2) ->
+      Printf.sprintf "  terminator: if %s goto %s else goto %s"
+        (string_of_operand cond) l1 l2
+  | TermRet None -> "  terminator: return"
+  | TermRet (Some op) ->
+      Printf.sprintf "  terminator: return %s" (string_of_operand op)
+  | TermUnreachable -> "  terminator: unreachable"
+
+let print_ir_block (b : ir_block) =
+  Printf.printf "%s:\n" b.label;
+  List.iter
+    (fun inst -> Printf.printf "    %s\n" (string_of_ir_inst inst))
+    b.insts;
+  Printf.printf "%s\n" (string_of_ir_term b.terminator);
+  Printf.printf "    preds: [%s]\n" (String.concat ", " b.preds);
+  Printf.printf "    succs: [%s]\n" (String.concat ", " b.succs)
+
+let print_ir_func_o (f : ir_func_o) =
+  Printf.printf "function %s(%s):\n" f.name (String.concat ", " f.args);
+  List.iter print_ir_block f.blocks
+
+let print_ir_program (prog : ir_program) =
+  match prog with
+  | Ir_funcs funcs -> List.iter print_ir_func funcs
+  | Ir_funcs_o funcs -> List.iter print_ir_func_o funcs
