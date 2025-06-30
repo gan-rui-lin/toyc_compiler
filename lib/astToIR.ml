@@ -1,3 +1,4 @@
+
 (*astToIR.ml*)
 (* 引入 AST 和 IR 类型 *)
 open Ast
@@ -252,5 +253,88 @@ let func_to_ir (f : func_def) : ir_func =
   in
   { name = f.func_name; args = f.params; body = body_code }
 
+(* 线性IR -> 过程块IR *)
+let partition_blocks (insts : ir_inst list) : ir_block list =
+  let rec split acc curr label insts =
+    match insts with
+    | [] -> (
+        match curr with
+        | [] -> List.rev acc
+        | _ -> failwith "Basic block must end with a terminator")
+    | Label l :: rest ->
+        (* 当前块结束，开启新块 *)
+        let acc' =
+          match curr with
+          | [] -> acc
+          | _ ->
+              let blk =
+                {
+                  label;
+                  insts = List.rev curr;
+                  terminator = TermUnreachable;
+                  (* 临时占位 *)
+                  preds = [];
+                  succs = [];
+                }
+              in
+              blk :: acc
+        in
+        split acc' [] l rest
+    | Goto l :: rest ->
+        let blk =
+          {
+            label;
+            insts = List.rev curr;
+            terminator = TermGoto l;
+            preds = [];
+            succs = [];
+          }
+        in
+        split (blk :: acc) [] (fresh_label ()) rest
+    | IfGoto (cond, l) :: rest ->
+        let l_else = fresh_label () in
+        let blk =
+          {
+            label;
+            insts = List.rev curr;
+            terminator = TermIf (cond, l, l_else);
+            (* 假设 Goto 紧跟后面补全 else *)
+            preds = [];
+            succs = [];
+          }
+        in
+        split (blk :: acc) [] l_else rest
+    | Ret op :: rest ->
+        let blk =
+          {
+            label;
+            insts = List.rev curr;
+            terminator = TermRet op;
+            preds = [];
+            succs = [];
+          }
+        in
+        split (blk :: acc) [] (fresh_label ()) rest
+    | inst :: rest -> split acc (inst :: curr) label rest
+  in
+  split [] [] (fresh_label ()) insts
+
+(* 优化版本的 ir 控制块 *)
+let func_to_ir_o (f : func_def) : ir_func_o =
+  temp_id := 0;
+  label_id := 0;
+  let env =
+    List.fold_left
+      (fun acc name -> Env.add name (Var name) acc)
+      Env.empty f.params
+  in
+  let linear_ir, _ = stmt_to_res env (Block f.body) in
+  let blocks = partition_blocks linear_ir in
+  (* 构建 cfg *)
+  Cfg.build_cfg blocks;
+  { name = f.func_name; args = f.params; blocks }
+
 (* 编译单元转换 *)
-let program_to_ir (cu : comp_unit) : ir_program = List.map func_to_ir cu
+let program_to_ir (cu : comp_unit) (optimize_flag : bool) : ir_program =
+  if optimize_flag then Ir_funcs_o (List.map func_to_ir_o cu)
+  else Ir_funcs (List.map func_to_ir cu)
