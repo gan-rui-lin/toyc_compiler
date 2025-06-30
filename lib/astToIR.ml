@@ -181,8 +181,7 @@ let rec stmt_to_res (ctx : context) (s : stmt) : stmt_res =
         cc
         @ [ IfGoto (cnd, lthen); Goto lskip ]
         @ [ Label lthen ] @ then_code @ [ Label lskip ]
-      in
-      match then_res with Returned _ -> Returned code | _ -> Normal code)
+      in Normal code)
   | While (cond, body) ->
       (* 循环标签 *)
       let lcond = fresh_label ()
@@ -243,7 +242,14 @@ let func_to_ir (f : func_def) : ir_func =
   let ctx0 = { env = init_env; break_lbl = None; continue_lbl = None } in
   (* 翻译函数体 *)
   let body_res = stmt_to_res ctx0 (Block f.body) in
-  let body_code = flatten body_res in
+  (* 先拿到全部 IR 指令 *)
+  let raw_code = flatten body_res in
+  (* 如果末尾恰好是一个孤立 Label，就把它丢掉 *)
+  let body_code =
+    match List.rev raw_code with
+    | Label _ :: rest_rev -> List.rev rest_rev
+    | _                   -> raw_code
+  in
   { name = f.func_name; args = f.params; body = body_code }
 
 (* 编译单元转换 *)
