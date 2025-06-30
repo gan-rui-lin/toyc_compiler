@@ -13,6 +13,8 @@ type context = {
   continue_lbl : string option; (* continue 跳转目标 *)
 }
 
+module LabelMap = Map.Make (String)
+
 (* 临时寄存器与标签生成器 *)
 let temp_id = ref 0
 
@@ -22,11 +24,24 @@ let fresh_temp () =
   Reg ("t" ^ string_of_int id)
 
 let label_id = ref 0
+let ir_label_id = ref 0
 
 let fresh_label () =
   let id = !label_id in
   incr label_id;
   "L" ^ string_of_int id
+
+let fresh_IRlabel (label_map : string LabelMap.t) (l : param) :
+    string * string LabelMap.t =
+  (* 先查找 l 是否已经分配了 label，如果有直接返回，否则分配新 label，并写回 map *)
+  match LabelMap.find_opt l label_map with
+  | Some lbl -> (lbl, label_map)
+  | None ->
+      let id = !ir_label_id in
+      incr ir_label_id;
+      let lbl = "LABEL" ^ string_of_int id in
+      let label_map' = LabelMap.add l lbl label_map in
+      (lbl, label_map')
 
 (* 操作符到字符串映射 *)
 let string_of_binop = function
@@ -255,56 +270,66 @@ let func_to_ir (f : func_def) : ir_func =
 
 (* 线性IR -> 过程块IR *)
 let partition_blocks (insts : ir_inst list) : ir_block list =
-  let rec split acc curr label insts =
+  let rec split acc curr label label_map insts =
     match insts with
     | [] -> (
         match curr with
         | [] -> List.rev acc
         | _ -> failwith "Basic block must end with a terminator")
-    | Label l :: rest ->
+    | Label l :: rest -> (
         (* 当前块结束，开启新块 *)
-        let acc' =
-          match curr with
-          | [] -> acc
-          | _ ->
-              let blk =
-                {
-                  label;
-                  insts = List.rev curr;
-                  terminator = TermUnreachable;
-                  (* 临时占位 *)
-                  preds = [];
-                  succs = [];
-                }
-              in
-              blk :: acc
-        in
-        split acc' [] l rest
+        match curr with
+        | [] ->
+            let next_label, label_map' = fresh_IRlabel label_map l in
+            split acc [] next_label label_map' rest
+        | _ ->
+            let next_label, label_map' = fresh_IRlabel label_map l in
+            let blk =
+              {
+                label;
+                insts = List.rev curr;
+                terminator = TermSeq next_label;
+                preds = [];
+                succs = [];
+              }
+            in
+            let acc' = blk :: acc in
+            split acc' [] next_label label_map' rest)
     | Goto l :: rest ->
+        let goto_label, label_map' = fresh_IRlabel label_map l in
+        (* 刷新一个无意义的 blk, 确保编程者不会出现的 label *)
+        let next_label, label_map'' =
+          fresh_IRlabel label_map' ("__blk" ^ string_of_int !ir_label_id)
+        in
         let blk =
           {
             label;
             insts = List.rev curr;
-            terminator = TermGoto l;
+            terminator = TermGoto goto_label;
             preds = [];
             succs = [];
           }
         in
-        split (blk :: acc) [] (fresh_label ()) rest
+        split (blk :: acc) [] next_label label_map'' rest
     | IfGoto (cond, l) :: rest ->
-        let l_else = fresh_label () in
+        let then_label, label_map' = fresh_IRlabel label_map l in
+        let else_label, label_map'' =
+          fresh_IRlabel label_map' ("__else" ^ string_of_int !ir_label_id)
+        in
         let blk =
           {
             label;
             insts = List.rev curr;
-            terminator = TermIf (cond, l, l_else);
-            (* 假设 Goto 紧跟后面补全 else *)
+            terminator = TermIf (cond, then_label, else_label);
             preds = [];
             succs = [];
           }
         in
-        split (blk :: acc) [] l_else rest
+        split (blk :: acc) [] else_label label_map'' rest
     | Ret op :: rest ->
+        let next_label, label_map' =
+          fresh_IRlabel label_map ("__ret" ^ string_of_int !ir_label_id)
+        in
         let blk =
           {
             label;
@@ -314,10 +339,11 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
             succs = [];
           }
         in
-        split (blk :: acc) [] (fresh_label ()) rest
-    | inst :: rest -> split acc (inst :: curr) label rest
+        split (blk :: acc) [] next_label label_map' rest
+    | inst :: rest -> split acc (inst :: curr) label label_map rest
   in
-  split [] [] (fresh_label ()) insts
+  let entry_label, label_map = fresh_IRlabel LabelMap.empty "entry" in
+  split [] [] entry_label label_map insts
 
 (* 优化版本的 ir 控制块 *)
 let func_to_ir_o (f : func_def) : ir_func_o =
