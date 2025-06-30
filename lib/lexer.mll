@@ -18,7 +18,7 @@ let reserved = [
 }
 
 (* Regular expression definitions *)
-let digit = ['0'-'9']+
+let digit = ('0' | ['1'-'9'] ['0'-'9']*)
 let nondigit = ['a'-'z' 'A'-'Z' '_']
 let ident = nondigit (nondigit | digit)*
 (* let integer = '-'? ( '0' | ['1'-'9'] digit* ) *)
