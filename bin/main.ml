@@ -69,7 +69,7 @@ let () =
 
       if print_ir then Print_ir.print_ir_program ir;
 
-      (* if print_asm then Printf.printf "\n%s\n" (IrToAsm.compile_program ir); *)
+      if print_asm then Printf.printf "\n%s\n" (IrToAsm.compile_program ir);
 
       close_in ic
   | [ input_file; output_file ] ->
@@ -100,7 +100,7 @@ let () =
 
       if print_ir then Print_ir.print_ir_program ir ;
 
-      (* Printf.fprintf oc "%s\n" (IrToAsm.compile_program ir); *)
+      Printf.fprintf oc "%s\n" (IrToAsm.compile_program ir);
 
       close_in ic;
       close_out oc

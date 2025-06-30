@@ -15,7 +15,6 @@ let alloc_stack var =
     Hashtbl.add var_env var !stack_offset;
     !stack_offset
 
-
 let operand_to_str = function
   | Reg r | Var r -> Printf.sprintf "%d(sp)" (get_stack_offset r)
   | Imm i -> Printf.sprintf "%d" i
@@ -125,5 +124,14 @@ let compile_func (f : ir_func) : string =
   let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -256\n" func_label in
   prologue ^ param_setup ^ body_code
 
-(* let compile_program (prog : ir_program) : string =
-  ".text\n.global main\n\n" ^ (List.map compile_func prog |> String.concat "\n") *)
+let compile_func_o (_ : ir_func_o) : string = failwith "Not Completed Yet"
+
+let compile_program (prog : ir_program) : string =
+  let prologue = ".text\n.global main\n\n" in
+  let body_asm =
+    match prog with
+    | Ir_funcs funcs -> List.map compile_func funcs |> String.concat "\n"
+    | Ir_funcs_o funcs_o ->
+        List.map compile_func_o funcs_o |> String.concat "\n"
+  in
+  prologue ^ body_asm
