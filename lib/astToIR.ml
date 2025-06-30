@@ -119,6 +119,8 @@ let rec expr_to_ir (ctx : context) (e : expr) : operand * ir_inst list =
           ([], []) args
       in
       let ret = fresh_temp () in
+      (* 这里假设每次 Call 之后的结果放到一个新的寄存器里面 *)
+      (* 因为是 IR 阶段, 不考虑 rv32 具体的调用规范 *)
       (ret, codes @ [ Call (ret, f, ops) ])
 
 (* 语句翻译，返回 Normal/Returned，支持块作用域、break/continue、return 提前终止 *)

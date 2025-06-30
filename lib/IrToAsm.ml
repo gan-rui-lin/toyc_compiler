@@ -69,6 +69,7 @@ let compile_inst (inst : ir_inst) : string =
       in
       let load_src = load_operand "t0" src in
       load_src ^ Printf.sprintf "\tsw t0, %d(sp)\n" dst_off
+  (* Not used *)
   | Load (dst, src) ->
       let dst_off =
         alloc_stack
@@ -76,6 +77,7 @@ let compile_inst (inst : ir_inst) : string =
       in
       let src_code = load_operand "t1" src in
       src_code ^ "\tlw t0, 0(t1)\n" ^ Printf.sprintf "\tsw t0, %d(sp)\n" dst_off
+  (* Not used *)
   | Store (dst, src) ->
       let dst_code = load_operand "t1" dst in
       let src_code = load_operand "t2" src in
