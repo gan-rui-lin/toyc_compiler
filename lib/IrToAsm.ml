@@ -3,14 +3,18 @@ open Ir
 let stack_offset = ref 0
 let var_env = Hashtbl.create 64
 
-let alloc_stack var =
-  stack_offset := !stack_offset - 4;
-  Hashtbl.add var_env var !stack_offset;
-  !stack_offset
-
 let get_stack_offset var =
   try Hashtbl.find var_env var
   with Not_found -> failwith ("Unknown variable: " ^ var)
+
+(* 变量是否已经在符号表里面了, 存在则直接返回偏移, 否则分配新偏移 *)
+let alloc_stack var =
+  try get_stack_offset var
+  with _ ->
+    stack_offset := !stack_offset - 4;
+    Hashtbl.add var_env var !stack_offset;
+    !stack_offset
+
 
 let operand_to_str = function
   | Reg r | Var r -> Printf.sprintf "%d(sp)" (get_stack_offset r)
@@ -37,10 +41,10 @@ let compile_inst (inst : ir_inst) : string =
         | "*" -> "\tmul t0, t1, t2\n"
         | "/" -> "\tdiv t0, t1, t2\n"
         | "%" -> "\trem t0, t1, t2\n"
-        | "=="-> "\tsub t0, t1, t2\n\tseqz t0, t0\n" 
-        | "!="-> "\tsub t0, t1, t2\n\tsnez t0, t0\n" 
-        | "<="-> "\tsgt t0, t1, t2\n\txori t0, t0, 1\n"
-        | ">="-> "\tslt t0, t1, t2\n\txori t0, t0, 1\n" 
+        | "==" -> "\tsub t0, t1, t2\n\tseqz t0, t0\n"
+        | "!=" -> "\tsub t0, t1, t2\n\tsnez t0, t0\n"
+        | "<=" -> "\tsgt t0, t1, t2\n\txori t0, t0, 1\n"
+        | ">=" -> "\tslt t0, t1, t2\n\txori t0, t0, 1\n"
         | "<" -> "\tslt t0, t1, t2\n"
         | ">" -> "\tsgt t0, t1, t2\n"
         | "&&" -> "\tand t0, t1, t2\n"
