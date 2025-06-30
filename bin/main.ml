@@ -28,8 +28,9 @@ let pad_right s len = s ^ String.make (max 0 (len - String.length s)) ' '
 let () =
   Printexc.record_backtrace true;
 
-  let args = Array.to_list Sys.argv |> List.tl in  (* 去掉 argv[0] *)
-  let option_flags = ["--print_ast"; "--print_ir"; "--print_asm"] in
+  let args = Array.to_list Sys.argv |> List.tl in
+  (* 去掉 argv[0] *)
+  let option_flags = [ "--print_ast"; "--print_ir"; "--print_asm" ] in
 
   let args = Array.to_list Sys.argv |> List.tl in
   (* Drop argv[0] *)
@@ -37,6 +38,7 @@ let () =
   let print_ast = List.exists (( = ) "--print_ast") args in
   let print_ir = List.exists (( = ) "--print_ir") args in
   let block_ir = List.exists (( = ) "-block-ir") args in
+  let print_asm = List.exists (( = ) "--print_ir") args in
   let args = List.filter (fun s -> not (List.mem s option_flags)) args in
   match args with
   | [ input_file ] ->
@@ -63,15 +65,14 @@ let () =
 
       if print_ast then Printf.printf "%s\n" (Print_ast.string_of_comp_unit ast);
 
-      let ir = AstToIR.program_to_ir ast in
+      let ir = AstToIR.program_to_ir ast block_ir in
 
       if print_ir then Print_ir.print_ir_program ir;
 
-      if print_asm then Printf.printf "\n%s\n" (IrToAsm.compile_program ir);
+      (* if print_asm then Printf.printf "\n%s\n" (IrToAsm.compile_program ir); *)
 
       close_in ic
-
-  | [input_file; output_file] ->
+  | [ input_file; output_file ] ->
       let ic = open_in input_file in
       let oc = open_out output_file in
       let lexbuf = Lexing.from_channel ic in
@@ -95,17 +96,19 @@ let () =
 
       if print_ast then Printf.printf "%s\n" (Print_ast.string_of_comp_unit ast);
 
-      let ir = AstToIR.program_to_ir ast in
+      let ir = AstToIR.program_to_ir ast block_ir in
 
-      if print_ir then Print_ir.print_ir_program ir;
+      if print_ir then Print_ir.print_ir_program ir ;
 
-      Printf.fprintf oc "%s\n" (IrToAsm.compile_program ir);
+      (* Printf.fprintf oc "%s\n" (IrToAsm.compile_program ir); *)
 
       close_in ic;
       close_out oc
   | _ ->
       prerr_endline "用法:";
-      prerr_endline "  dune exec toyc_compiler [--print_ast] [--print_ir] [--print_asm] input.tc [output.s]";
+      prerr_endline
+        "  dune exec toyc_compiler [--print_ast] [--print_ir] [--print_asm] \
+         input.tc [output.s]";
       exit 1
 
 (* let read_file filename =

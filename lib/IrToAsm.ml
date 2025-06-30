@@ -125,5 +125,5 @@ let compile_func (f : ir_func) : string =
   let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -256\n" func_label in
   prologue ^ param_setup ^ body_code
 
-let compile_program (prog : ir_program) : string =
-  ".text\n.global main\n\n" ^ (List.map compile_func prog |> String.concat "\n")
+(* let compile_program (prog : ir_program) : string =
+  ".text\n.global main\n\n" ^ (List.map compile_func prog |> String.concat "\n") *)
