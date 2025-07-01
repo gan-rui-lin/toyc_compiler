@@ -105,6 +105,12 @@ let compile_inst (inst : ir_inst) : string =
       cond_code ^ Printf.sprintf "\tbne t0, x0, %s\n" label
   | Label label -> Printf.sprintf "%s:\n" label
 
+let compile_block (blk : ir_block) : string =
+    blk.insts
+    |> List.map compile_inst
+    |> String.concat ""
+
+
 let compile_func (f : ir_func) : string =
   Hashtbl.clear var_env;
   stack_offset := 0;
@@ -124,7 +130,25 @@ let compile_func (f : ir_func) : string =
   let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -256\n" func_label in
   prologue ^ param_setup ^ body_code
 
-let compile_func_o (_ : ir_func_o) : string = failwith "Not Completed Yet"
+let compile_func_o (f : ir_func_o) : string =
+  Hashtbl.clear var_env;
+  stack_offset := 0;
+
+  (* 参数入栈 *)
+  let param_setup =
+    List.mapi
+      (fun i name ->
+        let off = alloc_stack name in
+        Printf.sprintf "\tsw a%d, %d(sp)\n" i off)
+      f.args
+    |> String.concat ""
+  in
+
+  let body_code = f.blocks |> List.map compile_block |> String.concat "" in
+
+  let func_label = f.name in
+  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -256\n" func_label in
+  prologue ^ param_setup ^ body_code
 
 let compile_program (prog : ir_program) : string =
   let prologue = ".text\n.global main\n\n" in
