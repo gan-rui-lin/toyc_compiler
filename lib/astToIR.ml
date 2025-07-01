@@ -280,7 +280,7 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
         match curr with
         | [] ->
             let next_label, label_map' = fresh_IRlabel label_map l in
-            split acc [] next_label label_map' rest
+            split acc [Label l] next_label label_map' rest
         | _ ->
             let next_label, label_map' = fresh_IRlabel label_map l in
             let blk =
@@ -293,7 +293,7 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
               }
             in
             let acc' = blk :: acc in
-            split acc' [] next_label label_map' rest)
+            split acc' [Label l] next_label label_map' rest)
     | Goto l :: rest ->
         let goto_label, label_map' = fresh_IRlabel label_map l in
         (* 刷新一个无意义的 blk, 确保编程者不会出现的 label *)
@@ -303,7 +303,7 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
         let blk =
           {
             label;
-            insts = List.rev curr;
+            insts = List.rev (Goto l :: curr);
             terminator = TermGoto goto_label;
             preds = [];
             succs = [];
@@ -318,7 +318,7 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
         let blk =
           {
             label;
-            insts = List.rev curr;
+            insts = List.rev (IfGoto(cond, l) :: curr);
             terminator = TermIf (cond, then_label, else_label);
             preds = [];
             succs = [];
@@ -332,7 +332,7 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
         let blk =
           {
             label;
-            insts = List.rev curr;
+            insts = List.rev (Ret op ::curr);
             terminator = TermRet op;
             preds = [];
             succs = [];
