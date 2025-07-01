@@ -2,6 +2,7 @@
 (* 引入 AST 和 IR 类型 *)
 open Ast
 open Ir
+
 (* Map<String, operand> *)
 module Env = Map.Make (String)
 
@@ -80,10 +81,21 @@ let rec expr_to_ir (ctx : context) (e : expr) : operand * ir_inst list =
   | ID name ->
       let operand = Env.find name ctx.env in
       (operand, [])
-  | Unop (op, e1) ->
+  | Unop (op, e1) -> (
       let operand, code = expr_to_ir ctx e1 in
-      let res = fresh_temp () in
-      (res, code @ [ Unop (string_of_unop op, res, operand) ])
+      match operand with
+      | Imm n ->
+          let folded =
+            match op with
+            | Plus -> Imm n (* +n = n *)
+            | Minus -> Imm (-n) (* -n *)
+            | Not -> Imm (if n = 0 then 1 else 0)
+            (* !n *)
+          in
+          (folded, code)
+      | _ ->
+          let res = fresh_temp () in
+          (res, code @ [ Unop (string_of_unop op, res, operand) ]))
   | Binop (Land, e1, e2) ->
       (* 短路与: a && b *)
       let lhs, c1 = expr_to_ir ctx e1 in
@@ -117,25 +129,40 @@ let rec expr_to_ir (ctx : context) (e : expr) : operand * ir_inst list =
         @ [ Goto l_end; Label l_true; Assign (res, Imm 1); Label l_end ]
       in
       (res, code)
-  | Binop (op, e1, e2) ->
-      (* 普通二元运算 *)
+  | Binop (op, e1, e2) -> (
       let lhs, c1 = expr_to_ir ctx e1 in
       let rhs, c2 = expr_to_ir ctx e2 in
-      let dst = fresh_temp () in
-      (dst, c1 @ c2 @ [ Binop (string_of_binop op, dst, lhs, rhs) ])
+      match (lhs, rhs) with
+      | Imm a, Imm b ->
+          let folded =
+            match op with
+            | Add -> Imm (a + b)
+            | Sub -> Imm (a - b)
+            | Mul -> Imm (a * b)
+            | Div -> Imm (a / b)
+            | Mod -> Imm (a mod b)
+            | Eq -> Imm (if a = b then 1 else 0)
+            | Neq -> Imm (if a <> b then 1 else 0)
+            | Less -> Imm (if a < b then 1 else 0)
+            | Leq -> Imm (if a <= b then 1 else 0)
+            | Greater -> Imm (if a > b then 1 else 0)
+            | Geq -> Imm (if a >= b then 1 else 0)
+            | Lor | Land -> failwith "Never touched"
+          in
+          (folded, c1 @ c2)
+      | _ ->
+          let dst = fresh_temp () in
+          (dst, c1 @ c2 @ [ Binop (string_of_binop op, dst, lhs, rhs) ]))
   | Call (f, args) ->
       (* 参数顺序按出现顺序计算 *)
       let codes, oprs =
         List.fold_left
           (fun (acc_code, acc_opr) arg ->
             let opr, code = expr_to_ir ctx arg in
-            (* 代码和操作 *)
             (acc_code @ code, acc_opr @ [ opr ]))
           ([], []) args
       in
       let ret = fresh_temp () in
-      (* 这里假设每次 Call 之后的结果放到一个新的寄存器里面 *)
-      (* 因为是 IR 阶段, 不考虑 rv32 具体的调用规范 *)
       (ret, codes @ [ Call (ret, f, oprs) ])
 
 (* 语句翻译，返回 Normal/Returned，支持块作用域、break/continue、return 提前终止 *)
@@ -280,7 +307,7 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
         match curr with
         | [] ->
             let next_label, label_map' = fresh_IRlabel label_map l in
-            split acc [Label l] next_label label_map' rest
+            split acc [ Label l ] next_label label_map' rest
         | _ ->
             let next_label, label_map' = fresh_IRlabel label_map l in
             let blk =
@@ -293,7 +320,7 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
               }
             in
             let acc' = blk :: acc in
-            split acc' [Label l] next_label label_map' rest)
+            split acc' [ Label l ] next_label label_map' rest)
     | Goto l :: rest ->
         let goto_label, label_map' = fresh_IRlabel label_map l in
         (* 刷新一个无意义的 blk, 确保编程者不会出现的 label *)
@@ -318,7 +345,7 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
         let blk =
           {
             label;
-            insts = List.rev (IfGoto(cond, l) :: curr);
+            insts = List.rev (IfGoto (cond, l) :: curr);
             terminator = TermIf (cond, then_label, else_label);
             preds = [];
             succs = [];
@@ -332,7 +359,7 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
         let blk =
           {
             label;
-            insts = List.rev (Ret op ::curr);
+            insts = List.rev (Ret op :: curr);
             terminator = TermRet op;
             preds = [];
             succs = [];
@@ -341,6 +368,7 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
         split (blk :: acc) [] next_label label_map' rest
     | inst :: rest -> split acc (inst :: curr) label label_map rest
   in
+  (* 确保用户不使用 entry 标签 *)
   let entry_label, label_map = fresh_IRlabel LabelMap.empty "entry" in
   split [] [] entry_label label_map insts
 
