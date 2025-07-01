@@ -38,7 +38,7 @@ let () =
   let print_ast = List.exists (( = ) "--print_ast") args in
   let print_ir = List.exists (( = ) "--print_ir") args in
   let block_ir = List.exists (( = ) "-block-ir") args in
-  let print_asm = List.exists (( = ) "--print_ir") args in
+  let print_asm = List.exists (( = ) "--print_asm") args in
   let args = List.filter (fun s -> not (List.mem s option_flags)) args in
   match args with
   | [ input_file ] ->
