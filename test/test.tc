@@ -5,7 +5,7 @@ int f(int x) {
 int main() {
     int i = 0;
     int j = 0;
-    int sum = i -1;
+    int sum = 1114 -2 * 2 + (-10);
 
     // 外层 while，用于测试 continue 回到条件检查
     while (i < 5) {
