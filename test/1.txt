@@ -1,0 +1,151 @@
+function f(x):                      
+LABEL0:
+    t0 = x % 3
+    return t0
+  terminator: return t0
+    preds: []
+    succs: []
+function main():
+LABEL2:
+    i = 0
+    j = 0
+    sum = 1100
+    goto L0
+  terminator: goto LABEL3
+    preds: []
+    succs: [LABEL3]
+LABEL3:
+    L0:
+    t0 = i < 5
+    if t0 goto L1
+  terminator: if t0 goto LABEL5 else goto LABEL6
+    preds: [LABEL33, LABEL9, LABEL2]
+    succs: [LABEL5, LABEL6]
+LABEL6:
+    goto L2
+  terminator: goto LABEL7
+    preds: [LABEL3]
+    succs: [LABEL7]
+LABEL5:
+    L1:
+    t1 = i - 1
+    i = t1
+    t2 = i - 1
+    t3 = call f(t2)
+    t4 = t3 == 0
+    if t4 goto L3
+  terminator: if t4 goto LABEL9 else goto LABEL10
+    preds: [LABEL3]
+    succs: [LABEL9, LABEL10]
+LABEL10:
+    goto L4
+  terminator: goto LABEL11
+    preds: [LABEL5]
+    succs: [LABEL11]
+LABEL9:
+    L3:
+    goto L0
+  terminator: goto LABEL3
+    preds: [LABEL5]
+    succs: [LABEL3]
+LABEL11:
+    L4:
+    j = 0
+    goto L5
+  terminator: goto LABEL14
+    preds: [LABEL10]
+    succs: [LABEL14]
+LABEL14:
+    L5:
+    t5 = j < 4
+    if t5 goto L6
+  terminator: if t5 goto LABEL16 else goto LABEL17
+    preds: [LABEL27, LABEL25, LABEL11]
+    succs: [LABEL16, LABEL17]
+LABEL17:
+    goto L7
+  terminator: goto LABEL18
+    preds: [LABEL14]
+    succs: [LABEL18]
+LABEL16:
+    L6:
+    t6 = sum + j
+    sum = t6
+    t7 = sum > 10
+    if t7 goto L8
+  terminator: if t7 goto LABEL20 else goto LABEL21
+    preds: [LABEL14]
+    succs: [LABEL20, LABEL21]
+LABEL21:
+    goto L9
+  terminator: goto LABEL22
+    preds: [LABEL16]
+    succs: [LABEL22]
+LABEL20:
+    L8:
+    goto L7
+  terminator: goto LABEL18
+    preds: [LABEL16]
+    succs: [LABEL18]
+LABEL22:
+    L9:
+    t8 = j % 2
+    t9 = t8 == 0
+    if t9 goto L10
+  terminator: if t9 goto LABEL25 else goto LABEL26
+    preds: [LABEL21]
+    succs: [LABEL25, LABEL26]
+LABEL26:
+    goto L11
+  terminator: goto LABEL27
+    preds: [LABEL22]
+    succs: [LABEL27]
+LABEL25:
+    L10:
+    t10 = j + 1
+    j = t10
+    goto L5
+  terminator: goto LABEL14
+    preds: [LABEL22]
+    succs: [LABEL14]
+LABEL27:
+    L11:
+    t11 = call f(j)
+    t12 = sum + t11
+    sum = t12
+    t13 = j + 1
+    j = t13
+    goto L5
+  terminator: goto LABEL14
+    preds: [LABEL26]
+    succs: [LABEL14]
+LABEL18:
+    L7:
+    t14 = sum > 20
+    if t14 goto L12
+  terminator: if t14 goto LABEL31 else goto LABEL32
+    preds: [LABEL20, LABEL17]
+    succs: [LABEL31, LABEL32]
+LABEL32:
+    goto L13
+  terminator: goto LABEL33
+    preds: [LABEL18]
+    succs: [LABEL33]
+LABEL31:
+    L12:
+    goto L2
+  terminator: goto LABEL7
+    preds: [LABEL18]
+    succs: [LABEL7]
+LABEL33:
+    L13:
+    goto L0
+  terminator: goto LABEL3
+    preds: [LABEL32]
+    succs: [LABEL3]
+LABEL7:
+    L2:
+    return sum
+  terminator: return sum
+    preds: [LABEL31, LABEL6]
+    succs: []

@@ -29,8 +29,8 @@ type ir_term =
 
 type ir_block = {
   label : string;
-  insts : ir_inst list;
-  terminator : ir_term;
+  mutable insts : ir_inst list;
+  mutable terminator : ir_term;
   mutable preds : string list;
   mutable succs : string list;
 }

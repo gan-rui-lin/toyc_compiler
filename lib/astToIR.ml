@@ -392,7 +392,8 @@ let func_to_ir_o (f : func_def) : ir_func_o =
   let raw_blocks = partition_blocks linear_ir in
   (* 构建前驱/后继关系，并剔除空块/重复块 *)
   let cfg_blocks = Cfg.build_cfg raw_blocks in
-  { name = f.func_name; args = f.params; blocks = cfg_blocks }
+  let opt_blocks = Cfg.optimize cfg_blocks in
+  { name = f.func_name; args = f.params; blocks = opt_blocks }
 
 (* 编译单元转换 *)
 let program_to_ir (cu : comp_unit) (optimize_flag : bool) : ir_program =
