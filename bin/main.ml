@@ -38,6 +38,8 @@ let () =
 
     Printf.printf "%s\n" asm
   with e ->
-    let bt = Printexc.get_backtrace () in
-    let msg = Printexc.to_string e in
-    failwith (Printf.sprintf "Exception: %s\nBacktrace:\n%s\n\nInput:\n%s\n" msg bt input)
+    (* 打印输入方便调试，但不重新抛出新异常，保留原始回溯信息 *)
+    prerr_endline ("Exception raised. Input was:\n" ^ input);
+    prerr_endline ("Exception: " ^ Printexc.to_string e);
+    prerr_endline ("Backtrace:\n" ^ Printexc.get_backtrace ());
+    raise e  (* 重新抛出原始异常，让平台显示原始堆栈 *)
