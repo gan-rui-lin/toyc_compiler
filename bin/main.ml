@@ -28,18 +28,13 @@ let () =
 
   let input = read_all_input () in
 
-  try
-    let args = Array.to_list Sys.argv |> List.tl in
-    let optimize = List.exists (( = ) "-opt") args in
+  (* 用 stdout 打印 input，平台应该会收集到 *)
+  Printf.eprintf "Input:\n%s\n%!" input;
 
-    let ast = parse_program input in
-    let ir = AstToIR.program_to_ir ast optimize in
-    let asm = IrToAsm.compile_program ir in
+  let args = Array.to_list Sys.argv |> List.tl in
+  let optimize = List.exists (( = ) "-opt") args in
 
-    Printf.printf "%s\n" asm
-  with e ->
-    (* 打印输入方便调试，但不重新抛出新异常，保留原始回溯信息 *)
-    prerr_endline ("Exception raised. Input was:\n" ^ input);
-    prerr_endline ("Exception: " ^ Printexc.to_string e);
-    prerr_endline ("Backtrace:\n" ^ Printexc.get_backtrace ());
-    raise e  (* 重新抛出原始异常，让平台显示原始堆栈 *)
+  let ast = parse_program input in
+  let ir = AstToIR.program_to_ir ast optimize in
+  let asm = IrToAsm.compile_program ir in
+  Printf.printf "%s\n" asm
