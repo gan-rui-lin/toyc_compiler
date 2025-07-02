@@ -28,13 +28,10 @@ let () =
 
   let input = read_all_input () in
 
-  (* 用 stdout 打印 input，平台应该会收集到 *)
-  Printf.eprintf "Input:\n%s\n%!" input;
-
   let args = Array.to_list Sys.argv |> List.tl in
   let optimize = List.exists (( = ) "-opt") args in
 
   let ast = parse_program input in
-  let ir = AstToIR.program_to_ir ast optimize in
+  let ir = AstToIR.program_to_ir ast false in
   let asm = IrToAsm.compile_program ir in
   Printf.printf "%s\n" asm
