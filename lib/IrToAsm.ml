@@ -165,8 +165,9 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
     | Var v | Reg v ->
         (* 尝试分配寄存器 *)
         let r, spill = allocate_reg v live_out in
-        if r = reg then ("", reg, spill) 
-        else (Printf.sprintf "\tmv %s, %s\n" reg r, reg, spill) (* 如果和预分配寄存器不一致，那么执行 mv 指令 *)
+        if r = reg then ("", reg, spill)
+        else (Printf.sprintf "\tmv %s, %s\n" reg r, reg, spill)
+    (* 如果和预分配寄存器不一致，那么执行 mv 指令 *)
   in
   match inst with
   | Binop (op, dst, lhs, rhs) ->
@@ -268,7 +269,7 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
   | Label label -> Printf.sprintf "%s:\n" label
   | Ret None -> "\taddi sp, sp, 256\n\tret\n"
   | Ret (Some op) ->
-    (* 如果变量不在 a0 寄存器里面, mv 一下 *)
+      (* 如果变量不在 a0 寄存器里面, mv 一下 *)
       let code, _, spill = load_operand_to_reg "a0" op in
       Option.value ~default:"" spill ^ code ^ "\taddi sp, sp, 256\n\tret\n"
 
@@ -316,14 +317,20 @@ let compile_func_o (f : ir_func_o) : string =
 
   Optimazation.liveness_analysis f.blocks;
 
-  let param_setup =
+  (* let param_setup =
     List.mapi
       (fun i name ->
         let off = alloc_stack name in
         Printf.sprintf "\tsw a%d, %d(sp)\n" i off)
       f.args
     |> String.concat ""
-  in
+  in *)
+  (* 映射参数名到 a0-a7 *)
+  List.iteri
+    (fun i name ->
+      let reg = Printf.sprintf "a%d" i in
+      Hashtbl.add reg_map name reg)
+    f.args;
 
   let blocks_code =
     f.blocks |> List.map (fun blk -> compile_block blk) |> String.concat ""
@@ -331,7 +338,7 @@ let compile_func_o (f : ir_func_o) : string =
 
   let func_label = f.name in
   let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -256\n" func_label in
-  prologue ^ param_setup ^ blocks_code
+  prologue ^ blocks_code
 
 let compile_program (prog : ir_program) : string =
   let prologue = ".text\n.global main\n\n" in
