@@ -15,6 +15,7 @@ let parse_program (s : string) : func_def list =
 
 let () =
   Printexc.record_backtrace true;
+
   let read_all_input () =
     let rec aux acc =
       try
@@ -26,11 +27,17 @@ let () =
   in
 
   let input = read_all_input () in
-  let args = Array.to_list Sys.argv |> List.tl in
-  let optimize = List.exists (( = ) "-opt") args in
 
-  let ast = parse_program input in
-  let ir = AstToIR.program_to_ir ast true in
+  try
+    let args = Array.to_list Sys.argv |> List.tl in
+    let optimize = List.exists (( = ) "-opt") args in
 
-  let asm = IrToAsm.compile_program ir in
-  Printf.printf "%s\n" asm
+    let ast = parse_program input in
+    let ir = AstToIR.program_to_ir ast optimize in
+    let asm = IrToAsm.compile_program ir in
+
+    Printf.printf "%s\n" asm
+  with e ->
+    let bt = Printexc.get_backtrace () in
+    let msg = Printexc.to_string e in
+    failwith (Printf.sprintf "Exception: %s\nBacktrace:\n%s\n\nInput:\n%s\n" msg bt input)
