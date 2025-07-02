@@ -15,10 +15,17 @@ let parse_program (s : string) : func_def list =
 
 let () =
   Printexc.record_backtrace true;
-  let input =
-    try really_input_string stdin (in_channel_length stdin)
-    with End_of_file -> ""
+  let read_all_input () =
+    let rec aux acc =
+      try
+        let line = input_line stdin in
+        aux (line :: acc)
+      with End_of_file -> String.concat "\n" (List.rev acc)
+    in
+    aux []
   in
+
+  let input = read_all_input () in
   let args = Array.to_list Sys.argv |> List.tl in
   let optimize = List.exists (( = ) "-opt") args in
 
