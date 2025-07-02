@@ -317,6 +317,8 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
                 terminator = TermSeq next_label;
                 preds = [];
                 succs = [];
+                live_in = StringSet.empty;
+                live_out = StringSet.empty;
               }
             in
             let acc' = blk :: acc in
@@ -334,6 +336,8 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
             terminator = TermGoto goto_label;
             preds = [];
             succs = [];
+            live_in = StringSet.empty;
+            live_out = StringSet.empty;
           }
         in
         split (blk :: acc) [] next_label label_map'' rest
@@ -349,6 +353,8 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
             terminator = TermIf (cond, then_label, else_label);
             preds = [];
             succs = [];
+            live_in = StringSet.empty;
+            live_out = StringSet.empty;
           }
         in
         split (blk :: acc) [] else_label label_map'' rest
@@ -363,6 +369,8 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
             terminator = TermRet op;
             preds = [];
             succs = [];
+            live_in = StringSet.empty;
+            live_out = StringSet.empty;
           }
         in
         split (blk :: acc) [] next_label label_map' rest
@@ -392,6 +400,7 @@ let func_to_ir_o (f : func_def) : ir_func_o =
   let raw_blocks = partition_blocks linear_ir in
   (* 构建前驱/后继关系，并剔除空块/重复块 *)
   let cfg_blocks = Cfg.build_cfg raw_blocks in
+  (* let cfg_blocks = Liveness_analysis. *)
   { name = f.func_name; args = f.params; blocks = cfg_blocks }
 
 (* 编译单元转换 *)

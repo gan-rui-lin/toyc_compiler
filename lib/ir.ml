@@ -1,3 +1,5 @@
+module StringSet = Set.Make(String)
+
 type operand =
   | Reg of string (* 临时寄存器 *)
   | Imm of int (* 立即数 *)
@@ -33,7 +35,11 @@ type ir_block = {
   terminator : ir_term;
   mutable preds : string list;
   mutable succs : string list;
+  (* 活变量分析 *)
+  mutable live_in : StringSet.t;
+  mutable live_out : StringSet.t;
 }
+
 
 (* 用于 IR 优化的 func 定义 *)
 type ir_func_o = { name : string; args : string list; blocks : ir_block list }
