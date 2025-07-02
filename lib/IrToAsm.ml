@@ -6,39 +6,50 @@ let var_env = Hashtbl.create 64
 (* 寄存器分配相关 *)
 let reg_map : (string, string) Hashtbl.t = Hashtbl.create 64
 let spilled_vars : (string, int) Hashtbl.t = Hashtbl.create 64
-let reg_pool = ref ["t0"; "t1"; "t2"; "t3"; "t4"; "t5"; "t6"]
+let reg_pool = ref [ "t0"; "t1"; "t2"; "t3"; "t4"; "t5"; "t6" ]
 
+(* 寄存器号, spill 符 *)
 let allocate_reg var live_out : string * string option =
-  if Hashtbl.mem reg_map var then
-    (Hashtbl.find reg_map var, None)
+  (* 查找是否已分配寄存器 *)
+  if Hashtbl.mem reg_map var then (Hashtbl.find reg_map var, None)
   else
     match !reg_pool with
     | r :: rest ->
         reg_pool := rest;
         Hashtbl.add reg_map var r;
         (r, None)
-    | [] ->
+    | [] -> (
+        (* 寻找要覆盖 寄存器 *)
         let victim_opt =
           Hashtbl.fold
+            (* 对 variable-register 键值对做分析 *)
             (fun v r acc ->
+              (* 活着就不动 *)
               if StringSet.mem v live_out then acc else Some (v, r))
             reg_map None
         in
         match victim_opt with
         | Some (victim, reg) ->
-            let offset =
-              if Hashtbl.mem spilled_vars victim then Hashtbl.find spilled_vars victim
-              else (
-                stack_offset := !stack_offset - 4;
-                Hashtbl.add spilled_vars victim !stack_offset;
-                !stack_offset)
-            in
-            Hashtbl.remove reg_map victim;
-            Hashtbl.add reg_map var reg;
-            (reg, Some (Printf.sprintf "\tsw %s, %d(sp) # spill %s\n" reg offset victim))
-        | None -> failwith "All variables live, cannot spill"
-
-
+            if StringSet.mem victim live_out then
+              (* 仍然活跃，spill *)
+              let offset =
+                if Hashtbl.mem spilled_vars victim then
+                  Hashtbl.find spilled_vars victim
+                else (
+                  stack_offset := !stack_offset - 4;
+                  Hashtbl.add spilled_vars victim !stack_offset;
+                  !stack_offset)
+              in
+              ( reg,
+                Some
+                  (Printf.sprintf "\tsw %s, %d(sp) # spill %s\n" reg offset
+                     victim) )
+            else
+              ( (* 死变量，根本不用 spill *)
+                reg,
+                None )
+        (* 找不到要覆盖的寄存器 *)
+        | None -> failwith "All variables live, cannot spill")
 
 let get_stack_offset var =
   try Hashtbl.find var_env var
@@ -48,7 +59,7 @@ let get_stack_offset var =
 let alloc_stack var =
   try get_stack_offset var
   with _ ->
-    stack_offset := !stack_offset - 4;
+    stack_offset := !stack_offset + 4;
     Hashtbl.add var_env var !stack_offset;
     !stack_offset
 
@@ -142,37 +153,61 @@ let compile_inst (inst : ir_inst) : string =
       cond_code ^ Printf.sprintf "\tbne t0, x0, %s\n" label
   | Label label -> Printf.sprintf "%s:\n" label
 
-let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) : string =
+let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
+    string =
   let get_var = function
     | Reg x | Var x -> x
     | _ -> failwith "Expected variable"
   in
+  (* 指令, 操作数, spill 符 *)
+  let load_operand_to_reg reg = function
+    | Imm i -> (Printf.sprintf "\tli %s, %d\n" reg i, reg, None)
+    | Var v | Reg v ->
+        (* 尝试分配寄存器 *)
+        let r, spill = allocate_reg v live_out in
+        if r = reg then ("", reg, spill) 
+        else (Printf.sprintf "\tmv %s, %s\n" reg r, reg, spill) (* 如果和预分配寄存器不一致，那么执行 mv 指令 *)
+  in
   match inst with
   | Binop (op, dst, lhs, rhs) ->
-      let lhs_v = get_var lhs and rhs_v = get_var rhs and dst_v = get_var dst in
-      let lhs_reg, lhs_spill = allocate_reg lhs_v live_out in
-      let rhs_reg, rhs_spill = allocate_reg rhs_v live_out in
+      let dst_v = get_var dst in
       let dst_reg, dst_spill = allocate_reg dst_v live_out in
+      let lhs_code, lhs_reg, lhs_spill = load_operand_to_reg "t1" lhs in
+      let rhs_code, rhs_reg, rhs_spill = load_operand_to_reg "t2" rhs in
       let op_code =
         match op with
-        | "+" -> "\tadd" | "-" -> "\tsub" | "*" -> "\tmul" | "/" -> "\tdiv"
-        | "%" -> "\trem"
-        | "==" -> "\tsub\n\tseqz"
-        | "!=" -> "\tsub\n\tsnez"
-        | "<" -> "\tslt"
-        | ">" -> "\tsgt"
-        | "<=" -> "\tsgt\n\txori %s, %s, 1"
-        | ">=" -> "\tslt\n\txori %s, %s, 1"
-        | "&&" -> "\tand"
-        | "||" -> "\tor"
-        | _ -> failwith "Unknown binop"
+        | "+" -> Printf.sprintf "\tadd %s, %s, %s\n" dst_reg lhs_reg rhs_reg
+        | "-" -> Printf.sprintf "\tsub %s, %s, %s\n" dst_reg lhs_reg rhs_reg
+        | "*" -> Printf.sprintf "\tmul %s, %s, %s\n" dst_reg lhs_reg rhs_reg
+        | "/" -> Printf.sprintf "\tdiv %s, %s, %s\n" dst_reg lhs_reg rhs_reg
+        | "%" -> Printf.sprintf "\trem %s, %s, %s\n" dst_reg lhs_reg rhs_reg
+        | "==" ->
+            Printf.sprintf "\tsub %s, %s, %s\n\tseqz %s, %s\n" dst_reg lhs_reg
+              rhs_reg dst_reg dst_reg
+        | "!=" ->
+            Printf.sprintf "\tsub %s, %s, %s\n\tsnez %s, %s\n" dst_reg lhs_reg
+              rhs_reg dst_reg dst_reg
+        | "<" -> Printf.sprintf "\tslt %s, %s, %s\n" dst_reg lhs_reg rhs_reg
+        | ">" -> Printf.sprintf "\tsgt %s, %s, %s\n" dst_reg lhs_reg rhs_reg
+        | "<=" ->
+            Printf.sprintf "\tsgt %s, %s, %s\n\txori %s, %s, 1\n" dst_reg
+              lhs_reg rhs_reg dst_reg dst_reg
+        | ">=" ->
+            Printf.sprintf "\tslt %s, %s, %s\n\txori %s, %s, 1\n" dst_reg
+              lhs_reg rhs_reg dst_reg dst_reg
+        | "&&" -> Printf.sprintf "\tand %s, %s, %s\n" dst_reg lhs_reg rhs_reg
+        | "||" -> Printf.sprintf "\tor %s, %s, %s\n" dst_reg lhs_reg rhs_reg
+        | _ -> failwith ("Unknown binop: " ^ op)
       in
-      let spill_code = String.concat "" (List.filter_map Fun.id [lhs_spill; rhs_spill; dst_spill]) in
-      Printf.sprintf "%s\t%s %s, %s, %s\n" spill_code op_code dst_reg lhs_reg rhs_reg
-
+      let spill_code =
+        [ lhs_spill; rhs_spill; dst_spill ]
+        |> List.filter_map Fun.id |> String.concat ""
+      in
+      (* 先spill 变量 *)
+      spill_code ^ lhs_code ^ rhs_code ^ op_code
   | Unop (op, dst, src) ->
-      let src_v = get_var src and dst_v = get_var dst in
-      let src_reg, src_spill = allocate_reg src_v live_out in
+      let src_code, src_reg, src_spill = load_operand_to_reg "t1" src in
+      let dst_v = get_var dst in
       let dst_reg, dst_spill = allocate_reg dst_v live_out in
       let op_code =
         match op with
@@ -181,46 +216,61 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) : strin
         | "+" -> Printf.sprintf "\tmv %s, %s\n" dst_reg src_reg
         | _ -> failwith ("Unknown unop: " ^ op)
       in
-      let spill_code = String.concat "" (List.filter_map Fun.id [src_spill; dst_spill]) in
-      spill_code ^ op_code
-
+      ([ src_spill; dst_spill ] |> List.filter_map Fun.id |> String.concat "")
+      ^ src_code ^ op_code
   | Assign (dst, src) ->
-      let src_reg =
-        match src with
-        | Imm i -> let reg = "t0" in ignore (Printf.sprintf "\tli %s, %d\n" reg i); reg
-        | _ ->
-            let src_v = get_var src in
-            let reg, spill = allocate_reg src_v live_out in
-            Option.value ~default:"" spill |> ignore;
-            reg
-      in
       let dst_v = get_var dst in
       let dst_reg, dst_spill = allocate_reg dst_v live_out in
-      let spill_code = Option.value ~default:"" dst_spill in
-      spill_code ^ Printf.sprintf "\tmv %s, %s\n" dst_reg src_reg
-
+      let src_code, src_reg, src_spill = load_operand_to_reg "t0" src in
+      ([ src_spill; dst_spill ] |> List.filter_map Fun.id |> String.concat "")
+      ^ src_code
+      ^ Printf.sprintf "\tmv %s, %s\n" dst_reg src_reg
+  | Store (addr, value) ->
+      let addr_code, addr_reg, addr_spill = load_operand_to_reg "t1" addr in
+      let val_code, val_reg, val_spill = load_operand_to_reg "t2" value in
+      ([ addr_spill; val_spill ] |> List.filter_map Fun.id |> String.concat "")
+      ^ addr_code ^ val_code
+      ^ Printf.sprintf "\tsw %s, 0(%s)\n" val_reg addr_reg
+  | Load (dst, addr) ->
+      let addr_code, addr_reg, addr_spill = load_operand_to_reg "t1" addr in
+      let dst_v = get_var dst in
+      let dst_reg, dst_spill = allocate_reg dst_v live_out in
+      ([ addr_spill; dst_spill ] |> List.filter_map Fun.id |> String.concat "")
+      ^ addr_code
+      ^ Printf.sprintf "\tlw %s, 0(%s)\n" dst_reg addr_reg
   | Call (dst, fname, args) ->
-      (* riscv 压参规范 *)
       let arg_code =
         args
         |> List.mapi (fun i arg ->
-               let reg = Printf.sprintf "a%d" i in
-               match arg with
-               | Imm i -> Printf.sprintf "\tli %s, %d\n" reg i
-               | Reg x | Var x ->
-                   let r, spill = allocate_reg x live_out in
-                   let spill_code = Option.value ~default:"" spill in
-                   spill_code ^ Printf.sprintf "\tmv %s, %s\n" reg r)
+               (* TODO : MORE THEN 8 PARAMS *)
+               let reg =
+                 if i < 8 then Printf.sprintf "a%d" i else "TODO_STACK"
+               in
+               let op_code, op_reg, op_spill = load_operand_to_reg reg arg in
+               let move_code =
+                 if reg = op_reg then ""
+                 else Printf.sprintf "\tmv %s, %s\n" reg op_reg
+               in
+               (op_spill |> Option.value ~default:"") ^ op_code ^ move_code)
         |> String.concat ""
       in
       let dst_v = get_var dst in
       let dst_reg, dst_spill = allocate_reg dst_v live_out in
-      let spill_code = Option.value ~default:"" dst_spill in
-      arg_code ^ "\tcall " ^ fname ^ "\n" ^ spill_code ^ Printf.sprintf "\tmv %s, a0\n" dst_reg
-
-  | _ -> failwith "Instruction not supported in SSA-lowered IR"
-
-
+      arg_code ^ "\tcall " ^ fname ^ "\n"
+      ^ Option.value ~default:"" dst_spill
+      ^ Printf.sprintf "\tmv %s, a0\n" dst_reg
+  | IfGoto (cond, label) ->
+      let cond_code, cond_reg, cond_spill = load_operand_to_reg "t0" cond in
+      Option.value ~default:"" cond_spill
+      ^ cond_code
+      ^ Printf.sprintf "\tbne %s, x0, %s\n" cond_reg label
+  | Goto label -> Printf.sprintf "\tj %s\n" label
+  | Label label -> Printf.sprintf "%s:\n" label
+  | Ret None -> "\taddi sp, sp, 256\n\tret\n"
+  | Ret (Some op) ->
+    (* 如果变量不在 a0 寄存器里面, mv 一下 *)
+      let code, _, spill = load_operand_to_reg "a0" op in
+      Option.value ~default:"" spill ^ code ^ "\taddi sp, sp, 256\n\tret\n"
 
 let compile_block (blk : ir_block) : string =
   let code_acc = ref [] in
@@ -238,7 +288,6 @@ let compile_block (blk : ir_block) : string =
     (List.rev blk.insts);
 
   String.concat "" !code_acc
-
 
 let compile_func (f : ir_func) : string =
   Hashtbl.clear var_env;
@@ -277,15 +326,12 @@ let compile_func_o (f : ir_func_o) : string =
   in
 
   let blocks_code =
-    f.blocks
-    |> List.map (fun blk -> compile_block blk)
-    |> String.concat ""
+    f.blocks |> List.map (fun blk -> compile_block blk) |> String.concat ""
   in
 
   let func_label = f.name in
   let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -256\n" func_label in
   prologue ^ param_setup ^ blocks_code
-
 
 let compile_program (prog : ir_program) : string =
   let prologue = ".text\n.global main\n\n" in
