@@ -151,7 +151,7 @@ let compile_func_o (f : ir_func_o) : string =
   prologue ^ param_setup ^ body_code
 
 let compile_program (prog : ir_program) : string =
-  let prologue = ".text\n.global main\n\n" in
+  let prologue = "" in
   let body_asm =
     match prog with
     | Ir_funcs funcs -> List.map compile_func funcs |> String.concat "\n"
