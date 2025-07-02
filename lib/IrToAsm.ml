@@ -341,7 +341,7 @@ let compile_func_o (f : ir_func_o) : string =
   prologue ^ blocks_code
 
 let compile_program (prog : ir_program) : string =
-  let prologue = "" in
+  let prologue =     ".text\n .global main\n" in
   let body_asm =
     match prog with
     | Ir_funcs funcs -> List.map compile_func funcs |> String.concat "\n"
