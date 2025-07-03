@@ -148,18 +148,28 @@ let compile_inst (inst : ir_inst) : string =
           (match dst with Reg r | Var r -> r | _ -> failwith "Bad dst")
       in
       let args_code =
-        List.mapi (fun i arg -> load_operand (Printf.sprintf "a%d" i) arg) args
+        List.mapi
+          (fun i arg ->
+            if i < 8 then load_operand (Printf.sprintf "a%d" i) arg
+            else
+              let offset = 4 * (i - 8) in
+              load_operand "t0" arg ^ Printf.sprintf "\tsw t0, %d(sp)\n" (-1600 - offset))
+          args
         |> String.concat ""
       in
       args_code ^ Printf.sprintf "\tcall %s\n\tsw a0, %d(sp)\n" fname dst_off
   | Ret None ->
       let ra_offset = get_stack_offset "ra" in
-      Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 1024\n\taddi sp,sp,1024\n\tret\n" ra_offset
+      Printf.sprintf
+        "\tlw ra, %d(sp)\n\taddi sp, sp, 800\n\taddi sp,sp,800\n\tret\n"
+        ra_offset
   | Ret (Some op) ->
       let load_code = load_operand "a0" op in
       let ra_offset = get_stack_offset "ra" in
       load_code
-      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 1024\n\taddi sp,sp,1024\n\tret\n" ra_offset
+      ^ Printf.sprintf
+          "\tlw ra, %d(sp)\n\taddi sp, sp, 800\n\taddi sp,sp,800\n\tret\n"
+          ra_offset
   | Goto label -> Printf.sprintf "\tj %s\n" label
   | IfGoto (cond, label) ->
       let cond_code = load_operand "t0" cond in
@@ -343,7 +353,12 @@ let compile_func (f : ir_func) : string =
     List.mapi
       (fun i name ->
         let off = alloc_stack name in
-        Printf.sprintf "\tsw a%d, %d(sp)\n" i off)
+        if i < 8 then Printf.sprintf "\tsw a%d, %d(sp)\n" i off
+        else
+          Printf.sprintf "\tlw t0, %d(sp)\n\tsw t0, %d(sp)\n"
+            (* offset 为 call 语句将第 i 个参数压入的偏移 *)
+            (-4 * (i - 8))
+            off)
       f.args
     |> String.concat ""
   in
@@ -358,12 +373,13 @@ let compile_func (f : ir_func) : string =
   let body_code =
     if not (String.ends_with ~suffix:"\tret\n" body_code) then
       body_code
-      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 1024\n\taddi sp,sp,1024\n\tret\n"
+      ^ Printf.sprintf
+          "\tlw ra, %d(sp)\n\taddi sp, sp, 800\n\taddi sp,sp,800\n\tret\n"
           (get_stack_offset "ra")
     else body_code
   in
   let func_label = f.name in
-  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -2048\n" func_label in
+  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -1600\n" func_label in
   prologue ^ param_setup ^ body_code
 
 let compile_func_o (f : ir_func_o) : string =
@@ -400,17 +416,18 @@ let compile_func_o (f : ir_func_o) : string =
   in
 
 
-  (* 检查 body_code 是否以 ret 结束; 没有默认添加 "\taddi sp, sp, 1024\n\taddi sp,sp,1024\n\tret\n" 语句; 其实可以前移到 IR 阶段 *)
+  (* 检查 body_code 是否以 ret 结束; 没有默认添加 "\taddi sp, sp, 800\n\taddi sp,sp,800\n\tret\n" 语句; 其实可以前移到 IR 阶段 *)
   let body_code =
     if not (String.ends_with ~suffix:"\tret\n" body_code) then
       body_code
-      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 1024\n\taddi sp,sp,1024\n\tret\n"
+      ^ Printf.sprintf
+          "\tlw ra, %d(sp)\n\taddi sp, sp, 800\n\taddi sp,sp,800\n\tret\n"
           (get_stack_offset "ra")
     else body_code
   in
 
   let func_label = f.name in
-  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -2048\n" func_label in
+  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -1600\n" func_label in
   prologue ^ param_setup ^ body_code
 
 let compile_program (prog : ir_program) : string =
