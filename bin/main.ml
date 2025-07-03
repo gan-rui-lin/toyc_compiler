@@ -1,8 +1,9 @@
 open Compilerlib
 open Ast
 
-let parse_program (s : string) : func_def list =
-  let lexbuf = Lexing.from_string s in
+let parse_program (_ : string) : func_def list =
+  failwith "not completed"
+  (* let lexbuf = Lexing.from_string s in
   try Parser.comp_unit Lexer.token lexbuf
   with Parsing.Parse_error ->
     let pos = lexbuf.Lexing.lex_curr_p in
@@ -11,10 +12,11 @@ let parse_program (s : string) : func_def list =
     let token = Lexing.lexeme lexbuf in
     Printf.eprintf "Syntax error at line %d, column %d: unexpected token '%s'\n"
       line col token;
-    exit 1
+    exit 1 *)
 
 let () =
   Printexc.record_backtrace true;
+
   let read_all_input () =
     let rec aux acc =
       try
@@ -24,8 +26,8 @@ let () =
     in
     aux []
   in
-
   let input = read_all_input () in
+  Printf.eprintf "Input:\n%s\n%!" input;
   let args = Array.to_list Sys.argv |> List.tl in
   let optimize = List.exists (( = ) "-opt") args in
 
