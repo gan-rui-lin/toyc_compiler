@@ -320,7 +320,15 @@ let compile_func_o (f : ir_func_o) : string =
 
   Optimazation.liveness_analysis f.blocks;
 
-  (* let param_setup =
+  (* 映射参数名到 a0-a7 *)
+  List.iteri
+    (fun i name ->
+      let reg = Printf.sprintf "a%d" i in
+      Hashtbl.add reg_map name reg)
+    f.args;
+
+(* 参数入栈 *)
+  let param_setup =
     List.mapi
       (fun i name ->
         let off = alloc_stack name in
