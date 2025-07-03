@@ -51,6 +51,15 @@ let allocate_reg var live_out : string * string option =
         (* 找不到要覆盖的寄存器 *)
         | None -> failwith "All variables live, cannot spill")
 
+let fresh_temp () : string =
+  match !reg_pool with
+  | r :: rest ->
+      reg_pool := rest;
+      r
+  | [] -> failwith "No free temporary registers available"
+
+let free_temp reg = reg_pool := reg :: !reg_pool
+
 let get_stack_offset var =
   try Hashtbl.find var_env var
   with Not_found -> failwith ("Unknown variable: " ^ var)
@@ -159,10 +168,7 @@ let compile_inst (inst : ir_inst) : string =
 
 let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
     string =
-  let get_var = function
-    | Reg x | Var x -> x
-    | _ -> failwith "Expected variable"
-  in
+  let get_var = function Reg x | Var x -> x | Imm _ -> "IMM" in
   (* 指令, 操作数, spill 符 *)
   let load_operand_to_reg reg = function
     | Imm i -> (Printf.sprintf "\tli %s, %d\n" reg i, reg, None)
@@ -173,12 +179,20 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
         else (Printf.sprintf "\tmv %s, %s\n" reg r, reg, spill)
     (* 如果和预分配寄存器不一致，那么执行 mv 指令 *)
   in
+  let load_operand_free = function
+    | Imm i ->
+        let reg = fresh_temp () in
+        (Printf.sprintf "\tli %s, %d\n" reg i, reg, None)
+    | Var v | Reg v ->
+        let reg, spill = allocate_reg v live_out in
+        ("", reg, spill)
+  in
   match inst with
   | Binop (op, dst, lhs, rhs) ->
       let dst_v = get_var dst in
       let dst_reg, dst_spill = allocate_reg dst_v live_out in
-      let lhs_code, lhs_reg, lhs_spill = load_operand_to_reg "t1" lhs in
-      let rhs_code, rhs_reg, rhs_spill = load_operand_to_reg "t2" rhs in
+      let lhs_code, lhs_reg, lhs_spill = load_operand_free lhs in
+      let rhs_code, rhs_reg, rhs_spill = load_operand_free rhs in
       let op_code =
         match op with
         | "+" -> Printf.sprintf "\tadd %s, %s, %s\n" dst_reg lhs_reg rhs_reg
@@ -208,10 +222,19 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
         [ lhs_spill; rhs_spill; dst_spill ]
         |> List.filter_map Fun.id |> String.concat ""
       in
+      (* 移除死变量对应的临时寄存器 *)
+      (match lhs with
+      | Imm _ -> free_temp lhs_reg
+      | Var v | Reg v ->
+          if not (StringSet.mem v live_out) then free_temp lhs_reg);
+      (match rhs with
+      | Imm _ -> free_temp rhs_reg
+      | Var v | Reg v ->
+          if not (StringSet.mem v live_out) then free_temp rhs_reg);
       (* 先spill 变量 *)
       spill_code ^ lhs_code ^ rhs_code ^ op_code
   | Unop (op, dst, src) ->
-      let src_code, src_reg, src_spill = load_operand_to_reg "t1" src in
+      let src_code, src_reg, src_spill = load_operand_free src in
       let dst_v = get_var dst in
       let dst_reg, dst_spill = allocate_reg dst_v live_out in
       let op_code =
@@ -221,12 +244,21 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
         | "+" -> Printf.sprintf "\tmv %s, %s\n" dst_reg src_reg
         | _ -> failwith ("Unknown unop: " ^ op)
       in
+
+      (match src with
+      | Imm _ -> free_temp src_reg
+      | Var v | Reg v ->
+          if not (StringSet.mem v live_out) then free_temp src_reg);
       ([ src_spill; dst_spill ] |> List.filter_map Fun.id |> String.concat "")
       ^ src_code ^ op_code
   | Assign (dst, src) ->
       let dst_v = get_var dst in
       let dst_reg, dst_spill = allocate_reg dst_v live_out in
-      let src_code, src_reg, src_spill = load_operand_to_reg "t0" src in
+      let src_code, src_reg, src_spill = load_operand_free src in
+      (match src with
+      | Imm _ -> free_temp src_reg
+      | Var v | Reg v ->
+          if not (StringSet.mem v live_out) then free_temp src_reg);
       ([ src_spill; dst_spill ] |> List.filter_map Fun.id |> String.concat "")
       ^ src_code
       ^ Printf.sprintf "\tmv %s, %s\n" dst_reg src_reg
@@ -260,10 +292,13 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
         |> String.concat ""
       in
       let dst_v = get_var dst in
+      (* Printf.printf "dst_v = %s" dst_v; *)
       let dst_reg, dst_spill = allocate_reg dst_v live_out in
+
+      (* Printf.printf "dst_reg = %s" dst_reg; *)
       arg_code ^ "\tcall " ^ fname ^ "\n"
       ^ Option.value ~default:"" dst_spill
-      ^ Printf.sprintf "\tmv %s, a0\n" dst_reg
+      ^ if dst_reg <> "a0" then Printf.sprintf "\tmv %s, a0\n" dst_reg else ""
   | IfGoto (cond, label) ->
       let cond_code, cond_reg, cond_spill = load_operand_to_reg "t0" cond in
       Option.value ~default:"" cond_spill
@@ -271,14 +306,33 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
       ^ Printf.sprintf "\tbne %s, x0, %s\n" cond_reg label
   | Goto label -> Printf.sprintf "\tj %s\n" label
   | Label label -> Printf.sprintf "%s:\n" label
-  | Ret None -> "\taddi sp, sp, 256\n\tret\n"
+  | Ret None ->
+      let ra_offset = get_stack_offset "ra" in
+      Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 256\n\tret\n" ra_offset
   | Ret (Some op) ->
       (* 如果变量不在 a0 寄存器里面, mv 一下 *)
       let code, _, spill = load_operand_to_reg "a0" op in
-      Option.value ~default:"" spill ^ code ^ "\taddi sp, sp, 256\n\tret\n"
+      let ra_offset = get_stack_offset "ra" in
+      Option.value ~default:"" spill
+      ^ code
+      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 256\n\tret\n" ra_offset
 
 let compile_block (blk : ir_block) : string =
-  blk.insts |> List.map compile_inst |> String.concat ""
+  let code_acc = ref [] in
+  let live = ref blk.live_out in
+
+  (* 倒序遍历指令，并处理活跃变量 *)
+  List.iter
+    (fun inst ->
+      let def, use = Optimazation.def_use_inst inst in
+      let live_out = !live in
+      let inst_code = compile_inst_with_liveness inst live_out in
+      code_acc := inst_code :: !code_acc;
+      (* 更新当前指令结束后的 live *)
+      live := StringSet.union (StringSet.diff !live def) use)
+    (List.rev blk.insts);
+
+  String.concat "" !code_acc
 
 let compile_func (f : ir_func) : string =
   Hashtbl.clear var_env;
@@ -345,7 +399,6 @@ let compile_func_o (f : ir_func_o) : string =
     f.blocks |> List.map (fun blk -> compile_block blk) |> String.concat ""
   in
 
-
   (* 检查 body_code 是否以 ret 结束; 没有默认添加 "\taddi sp, sp, 256\n\tret\n" 语句; 其实可以前移到 IR 阶段 *)
   let blocks_code =
     if not (String.ends_with ~suffix:"\tret\n" body_code) then
@@ -357,7 +410,7 @@ let compile_func_o (f : ir_func_o) : string =
 
   let func_label = f.name in
   let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -256\n" func_label in
-  prologue ^ param_setup ^ blocks_code 
+  prologue ^ param_setup ^ blocks_code
 
 let compile_program (prog : ir_program) : string =
   let prologue = ".text\n .global main\n" in
