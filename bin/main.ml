@@ -1,8 +1,9 @@
 open Compilerlib
 open Ast
 
-let parse_program (s : string) : func_def list =
-  let lexbuf = Lexing.from_string s in
+let parse_program (_ : string) : func_def list =
+  failwith "not completed"
+  (* let lexbuf = Lexing.from_string s in
   try Parser.comp_unit Lexer.token lexbuf
   with Parsing.Parse_error ->
     let pos = lexbuf.Lexing.lex_curr_p in
@@ -11,7 +12,7 @@ let parse_program (s : string) : func_def list =
     let token = Lexing.lexeme lexbuf in
     Printf.eprintf "Syntax error at line %d, column %d: unexpected token '%s'\n"
       line col token;
-    exit 1
+    exit 1 *)
 
 let () =
   Printexc.record_backtrace true;
