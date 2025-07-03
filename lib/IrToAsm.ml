@@ -143,10 +143,10 @@ let compile_inst (inst : ir_inst) : string =
         |> String.concat ""
       in
       args_code ^ Printf.sprintf "\tcall %s\n\tsw a0, %d(sp)\n" fname dst_off
-  | Ret None -> "\taddi sp, sp, 256\n\tret\n"
+  | Ret None -> "\taddi sp, sp, 64\n\tret\n"
   | Ret (Some op) ->
       let load_code = load_operand "a0" op in
-      load_code ^ "\taddi sp, sp, 256\n\tret\n"
+      load_code ^ "\taddi sp, sp, 64\n\tret\n"
   | Goto label -> Printf.sprintf "\tj %s\n" label
   | IfGoto (cond, label) ->
       let cond_code = load_operand "t0" cond in
@@ -306,7 +306,7 @@ let compile_func (f : ir_func) : string =
 
   let body_code = f.body |> List.map compile_inst |> String.concat "" in
   let func_label = f.name in
-  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -256\n" func_label in
+  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -64\n" func_label in
   prologue ^ param_setup ^ body_code
 
 let compile_func_o (f : ir_func_o) : string =
@@ -337,8 +337,8 @@ let compile_func_o (f : ir_func_o) : string =
   in
 
   let func_label = f.name in
-  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -256\n" func_label in
-  prologue ^ blocks_code
+  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -64\n" func_label in
+  prologue ^ param_setup ^ body_code
 
 let compile_program (prog : ir_program) : string =
   let prologue =     ".text\n .global main\n" in
