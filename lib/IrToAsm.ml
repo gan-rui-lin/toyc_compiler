@@ -300,6 +300,14 @@ let compile_func (f : ir_func) : string =
   in
 
   let body_code = f.body |> List.map compile_inst |> String.concat "" in
+
+  let body_code =
+    if not (String.ends_with ~suffix:"\tret\n" body_code) then
+      body_code
+      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 256\n\tret\n"
+          (get_stack_offset "ra")
+    else body_code
+  in
   let func_label = f.name in
   let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -256\n" func_label in
   prologue ^ param_setup ^ body_code
@@ -328,6 +336,15 @@ let compile_func_o (f : ir_func_o) : string =
 
   let blocks_code =
     f.blocks |> List.map (fun blk -> compile_block blk) |> String.concat ""
+  in
+
+  (* 检查 body_code 是否以 ret 结束; 没有默认添加 "\taddi sp, sp, 256\n\tret\n" 语句; 其实可以前移到 IR 阶段 *)
+  let body_code =
+    if not (String.ends_with ~suffix:"\tret\n" body_code) then
+      body_code
+      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 256\n\tret\n"
+          (get_stack_offset "ra")
+    else body_code
   in
 
   let func_label = f.name in
