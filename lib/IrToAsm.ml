@@ -363,7 +363,7 @@ let compile_func (f : ir_func) : string =
     else body_code
   in
   let func_label = f.name in
-  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -64\n" func_label in
+  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -256\n" func_label in
   prologue ^ param_setup ^ body_code
 
 let compile_func_o (f : ir_func_o) : string =
