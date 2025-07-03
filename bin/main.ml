@@ -45,7 +45,7 @@ let () =
   if print_ast then
     Printf.printf "AST:\n\n%s\n\n" (Print_ast.string_of_comp_unit ast);
 
-  let ir = AstToIR.program_to_ir ast false in
+  let ir = AstToIR.program_to_ir ast opt_flag in
 
   if print_ir then begin 
     Printf.printf "IR:\n\n";
