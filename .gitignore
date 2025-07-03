@@ -27,3 +27,11 @@ setup.log
 
 # Local OPAM switch
 _opam/
+
+test/*.c
+
+test/*.s
+
+test/d
+
+.vscode/*
