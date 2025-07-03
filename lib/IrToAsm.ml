@@ -11,7 +11,7 @@ let get_stack_offset var =
 let alloc_stack var =
   try get_stack_offset var
   with _ ->
-    stack_offset := !stack_offset - 4;
+    stack_offset := !stack_offset + 4;
     Hashtbl.add var_env var !stack_offset;
     !stack_offset
 
