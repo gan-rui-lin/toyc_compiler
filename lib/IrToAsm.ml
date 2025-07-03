@@ -154,12 +154,12 @@ let compile_inst (inst : ir_inst) : string =
       args_code ^ Printf.sprintf "\tcall %s\n\tsw a0, %d(sp)\n" fname dst_off
   | Ret None ->
       let ra_offset = get_stack_offset "ra" in
-      Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 1024\n\tret\n" ra_offset
+      Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 2048\n\tret\n" ra_offset
   | Ret (Some op) ->
       let load_code = load_operand "a0" op in
       let ra_offset = get_stack_offset "ra" in
       load_code
-      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 1024\n\tret\n" ra_offset
+      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 2048\n\tret\n" ra_offset
   | Goto label -> Printf.sprintf "\tj %s\n" label
   | IfGoto (cond, label) ->
       let cond_code = load_operand "t0" cond in
@@ -358,12 +358,12 @@ let compile_func (f : ir_func) : string =
   let body_code =
     if not (String.ends_with ~suffix:"\tret\n" body_code) then
       body_code
-      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 1024\n\tret\n"
+      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 2048\n\tret\n"
           (get_stack_offset "ra")
     else body_code
   in
   let func_label = f.name in
-  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -1024\n" func_label in
+  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -2048\n" func_label in
   prologue ^ param_setup ^ body_code
 
 let compile_func_o (f : ir_func_o) : string =
@@ -400,17 +400,17 @@ let compile_func_o (f : ir_func_o) : string =
   in
 
 
-  (* 检查 body_code 是否以 ret 结束; 没有默认添加 "\taddi sp, sp, 1024\n\tret\n" 语句; 其实可以前移到 IR 阶段 *)
+  (* 检查 body_code 是否以 ret 结束; 没有默认添加 "\taddi sp, sp, 2048\n\tret\n" 语句; 其实可以前移到 IR 阶段 *)
   let body_code =
     if not (String.ends_with ~suffix:"\tret\n" body_code) then
       body_code
-      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 1024\n\tret\n"
+      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 2048\n\tret\n"
           (get_stack_offset "ra")
     else body_code
   in
 
   let func_label = f.name in
-  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -1024\n" func_label in
+  let prologue = Printf.sprintf "%s:\n\taddi sp, sp, -2048\n" func_label in
   prologue ^ param_setup ^ body_code
 
 let compile_program (prog : ir_program) : string =
