@@ -8,7 +8,7 @@ module Env = Map.Make (String)
 
 (* 翻译上下文：包含当前 env 及循环标签，用于实现 break/continue *)
 type context = {
-  env : operand Env.t;
+  mutable env : operand Env.t;
   break_lbl : string option; (* break 跳转目标 *)
   continue_lbl : string option; (* continue 跳转目标 *)
 }
@@ -272,7 +272,7 @@ let rec stmt_to_res (ctx : context) (s : stmt) : stmt_res =
       (* 执行块体 *)
       let res = loop saved_env [] stmts in
       (* 恢复外层 env *)
-      (* ctx.env <- saved_env *)
+      ctx.env <- saved_env;
       res
 
 (* 函数转换 *)
