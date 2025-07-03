@@ -143,10 +143,14 @@ let compile_inst (inst : ir_inst) : string =
         |> String.concat ""
       in
       args_code ^ Printf.sprintf "\tcall %s\n\tsw a0, %d(sp)\n" fname dst_off
-  | Ret None -> "\taddi sp, sp, 256\n\tret\n"
+  | Ret None ->
+      let ra_offset = get_stack_offset "ra" in
+      Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 256\n\tret\n" ra_offset
   | Ret (Some op) ->
       let load_code = load_operand "a0" op in
-      load_code ^ "\taddi sp, sp, 256\n\tret\n"
+      let ra_offset = get_stack_offset "ra" in
+      load_code
+      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 256\n\tret\n" ra_offset
   | Goto label -> Printf.sprintf "\tj %s\n" label
   | IfGoto (cond, label) ->
       let cond_code = load_operand "t0" cond in
@@ -274,21 +278,7 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
       Option.value ~default:"" spill ^ code ^ "\taddi sp, sp, 256\n\tret\n"
 
 let compile_block (blk : ir_block) : string =
-  let code_acc = ref [] in
-  let live = ref blk.live_out in
-
-  (* 倒序遍历指令，并处理活跃变量 *)
-  List.iter
-    (fun inst ->
-      let def, use = Optimazation.def_use_inst inst in
-      let live_out = !live in
-      let inst_code = compile_inst_with_liveness inst live_out in
-      code_acc := inst_code :: !code_acc;
-      (* 更新当前指令结束后的 live *)
-      live := StringSet.union (StringSet.diff !live def) use)
-    (List.rev blk.insts);
-
-  String.concat "" !code_acc
+  blk.insts |> List.map compile_inst |> String.concat ""
 
 let compile_func (f : ir_func) : string =
   Hashtbl.clear var_env;
@@ -302,6 +292,11 @@ let compile_func (f : ir_func) : string =
         Printf.sprintf "\tsw a%d, %d(sp)\n" i off)
       f.args
     |> String.concat ""
+  in
+
+  (* ra 入栈 *)
+  let param_setup =
+    param_setup ^ Printf.sprintf "\tsw ra, %d(sp)\n" (alloc_stack "ra")
   in
 
   let body_code = f.body |> List.map compile_inst |> String.concat "" in
@@ -324,13 +319,12 @@ let compile_func_o (f : ir_func_o) : string =
         Printf.sprintf "\tsw a%d, %d(sp)\n" i off)
       f.args
     |> String.concat ""
-  in *)
-  (* 映射参数名到 a0-a7 *)
-  List.iteri
-    (fun i name ->
-      let reg = Printf.sprintf "a%d" i in
-      Hashtbl.add reg_map name reg)
-    f.args;
+  in
+
+  (* ra 入栈 *)
+  let param_setup =
+    param_setup ^ Printf.sprintf "\tsw ra, %d(sp)\n" (alloc_stack "ra")
+  in
 
   let blocks_code =
     f.blocks |> List.map (fun blk -> compile_block blk) |> String.concat ""
@@ -341,7 +335,7 @@ let compile_func_o (f : ir_func_o) : string =
   prologue ^ param_setup ^ body_code
 
 let compile_program (prog : ir_program) : string =
-  let prologue =     ".text\n .global main\n" in
+  let prologue = ".text\n .global main\n" in
   let body_asm =
     match prog with
     | Ir_funcs funcs -> List.map compile_func funcs |> String.concat "\n"
