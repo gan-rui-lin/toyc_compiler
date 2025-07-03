@@ -1,31 +1,3 @@
-AST:
-
-Function f(a) : int {
-  Return(Binop(%, ID(a), Number(3)))
-}
-
-Function main() : int {
-  Decl(x, Call(f, [Number(5)]))
-  Return(ID(x))
-}
-
-IR:
-
-function f(a):
-LABEL0:
-    t0 = a % 3
-    return t0
-  terminator: return t0
-    preds: []
-    succs: []
-function main():
-LABEL2:
-    t0 = call f(5)
-    x = t0
-    return x
-  terminator: return x
-    preds: []
-    succs: []
 
 
 .text

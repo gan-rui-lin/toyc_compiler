@@ -47,8 +47,10 @@ let () =
 
   let ir = AstToIR.program_to_ir ast opt_flag in
 
-  if print_ir then Printf.printf "IR:\n\n";
-  Print_ir.print_ir_program ir;
+  if print_ir then begin 
+    Printf.printf "IR:\n\n";
+    Print_ir.print_ir_program ir;
+  end ;
 
   let asm = IrToAsm.compile_program ir in
 
