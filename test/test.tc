@@ -1,10 +1,10 @@
-int add(int a, int b)
+int f(int a)
 {
-    return a + b;
+    return a % 3;
 }
 
 int main()
 {
-    int x = add(116, 105);
+    int x = f(5);
     return x;
 }
