@@ -1,13 +1,10 @@
+int add(int a, int b)
+{
+    return a + b;
+}
+
 int main()
 {
-    int a = 0;
-    int b = 1;
-    if (a && b)
-    {
-        return b;
-    }
-    else
-    {
-        return a;
-    }
+    int x = add(116, 105);
+    return x;
 }
