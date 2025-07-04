@@ -97,38 +97,42 @@ let rec expr_to_ir (ctx : context) (e : expr) : operand * ir_inst list =
           let res = fresh_temp () in
           (res, code @ [ Unop (string_of_unop op, res, operand) ]))
   | Binop (Land, e1, e2) ->
-      (* 短路与: a && b *)
-      let lhs, c1 = expr_to_ir ctx e1 in
-      let res = fresh_temp () in
-      let l_false = fresh_label () in
-      let l_end = fresh_label () in
-      (* 1. 如果 lhs==0 跳到 false *)
-      let code =
-        c1
-        @ [ IfGoto (lhs, l_false) ]
-        (* 2. 否则计算 rhs *)
-        @ (let rhs, c2 = expr_to_ir ctx e2 in
-           c2 @ [ Assign (res, rhs) ])
-        (* 3. 跳到结束 *)
-        @ [ Goto l_end; Label l_false; Assign (res, Imm 0); Label l_end ]
-      in
-      (res, code)
+    (* 短路与: a && b *)
+    let lhs, c1 = expr_to_ir ctx e1 in
+    let res = fresh_temp () in
+    let l_rhs = fresh_label () in
+    let l_true = fresh_label () in
+    let l_end = fresh_label () in
+    let rhs, c2 = expr_to_ir ctx e2 in
+    let code =
+      Assign (res, Imm 0) ::                    (* 默认值为 false *)
+      c1
+      @ [ IfGoto (lhs, l_rhs); Goto l_end ]     (* 如果 lhs != 0，继续执行 rhs，否则跳转结束 *)
+      @ [ Label l_rhs ]
+      @ c2
+      @ [ IfGoto (rhs, l_true); Goto l_end ]    (* 如果 rhs != 0，则成立 *)
+      @ [ Label l_true; Assign (res, Imm 1) ]
+      @ [ Label l_end ]
+    in
+    (res, code)
   | Binop (Lor, e1, e2) ->
-      (* 短路或: a || b *)
-      let lhs, c1 = expr_to_ir ctx e1 in
-      let res = fresh_temp () in
-      let l_true = fresh_label () in
-      let l_end = fresh_label () in
-      let code =
-        c1
-        (* 如果 lhs != 0 跳到 true *)
-        @ [ IfGoto (lhs, l_true) ]
-        (* 否则计算 rhs *)
-        @ (let rhs, c2 = expr_to_ir ctx e2 in
-           c2 @ [ Assign (res, rhs) ])
-        @ [ Goto l_end; Label l_true; Assign (res, Imm 1); Label l_end ]
-      in
-      (res, code)
+    (* 短路或: a || b *)
+    let lhs, c1 = expr_to_ir ctx e1 in
+    let res = fresh_temp () in
+    let l_rhs = fresh_label () in
+    let l_end = fresh_label () in
+    let rhs, c2 = expr_to_ir ctx e2 in
+    let code =
+      Assign (res, Imm 1) ::                    (* 默认值为 true *)
+      c1
+      @ [ IfGoto (lhs, l_end) ]                 (* 如果 lhs 为真，直接成功 *)
+      @ [ Label l_rhs ]
+      @ c2
+      @ [ IfGoto (rhs, l_end) ]                 (* 如果 rhs 为真，成功 *)
+      @ [ Assign (res, Imm 0) ]                 (* 否则为 false *)
+      @ [ Label l_end ]
+    in
+    (res, code)
   | Binop (op, e1, e2) -> (
       let lhs, c1 = expr_to_ir ctx e1 in
       let rhs, c2 = expr_to_ir ctx e2 in
