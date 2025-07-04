@@ -1,7 +1,7 @@
 open Ir
 
 let stack_offset = ref 0
-let var_env = Hashtbl.create 256
+let var_env = Hashtbl.create 1024
 
 (* 寄存器分配相关 *)
 let reg_map : (string, string) Hashtbl.t = Hashtbl.create 64
@@ -161,14 +161,14 @@ let compile_inst (inst : ir_inst) : string =
   | Ret None ->
       let ra_offset = get_stack_offset "ra" in
       Printf.sprintf
-        "\tlw ra, %d(sp)\n\taddi sp, sp, 800\n\taddi sp,sp,800\n\tret\n"
+        "\tlw ra, %d(sp)\n\taddi sp, sp, 1600\n\tret\n"
         ra_offset
   | Ret (Some op) ->
       let load_code = load_operand "a0" op in
       let ra_offset = get_stack_offset "ra" in
       load_code
       ^ Printf.sprintf
-          "\tlw ra, %d(sp)\n\taddi sp, sp, 800\n\taddi sp,sp,800\n\tret\n"
+          "\tlw ra, %d(sp)\n\taddi sp, sp, 1600\n\tret\n"
           ra_offset
   | Goto label -> Printf.sprintf "\tj %s\n" label
   | IfGoto (cond, label) ->
@@ -318,14 +318,14 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
   | Label label -> Printf.sprintf "%s:\n" label
   | Ret None ->
       let ra_offset = get_stack_offset "ra" in
-      Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 256\n\tret\n" ra_offset
+      Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 1600\n\tret\n" ra_offset
   | Ret (Some op) ->
       (* 如果变量不在 a0 寄存器里面, mv 一下 *)
       let code, _, spill = load_operand_to_reg "a0" op in
       let ra_offset = get_stack_offset "ra" in
       Option.value ~default:"" spill
       ^ code
-      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 256\n\tret\n" ra_offset
+      ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 1600\n\tret\n" ra_offset
 
 let compile_block (blk : ir_block) : string =
   let code_acc = ref [] in
@@ -374,7 +374,7 @@ let compile_func (f : ir_func) : string =
     if not (String.ends_with ~suffix:"\tret\n" body_code) then
       body_code
       ^ Printf.sprintf
-          "\tlw ra, %d(sp)\n\taddi sp, sp, 800\n\taddi sp,sp,800\n\tret\n"
+          "\tlw ra, %d(sp)\n\taddi sp, sp, 1600\n\tret\n"
           (get_stack_offset "ra")
     else body_code
   in
@@ -416,12 +416,12 @@ let compile_func_o (f : ir_func_o) : string =
   in
 
 
-  (* 检查 body_code 是否以 ret 结束; 没有默认添加 "\taddi sp, sp, 800\n\taddi sp,sp,800\n\tret\n" 语句; 其实可以前移到 IR 阶段 *)
+  (* 检查 body_code 是否以 ret 结束; 没有默认添加 "\taddi sp, sp, 1600\n\tret\n" 语句; 其实可以前移到 IR 阶段 *)
   let body_code =
     if not (String.ends_with ~suffix:"\tret\n" body_code) then
       body_code
       ^ Printf.sprintf
-          "\tlw ra, %d(sp)\n\taddi sp, sp, 800\n\taddi sp,sp,800\n\tret\n"
+          "\tlw ra, %d(sp)\n\taddi sp, sp, 1600\n\tret\n"
           (get_stack_offset "ra")
     else body_code
   in
