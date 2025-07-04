@@ -6,6 +6,10 @@ module StringMap = Map.Make(String)
 type const_state = int option
 (* 映射变量名 -> 常量值（或None表示非常量） *)
 type const_env = const_state StringMap.t
+(*取模*)
+let word_mod n =
+  let m = Int32.of_int n in
+  Int32.to_int (Int32.logand m 0xFFFFFFFFl)
 
 (* 合并多个环境的状态 *)
 let merge_envs (envs : const_env list) : const_env =
@@ -40,29 +44,29 @@ let eval_operand env op =
 let eval_binop op op1 op2 =
   match (op1, op2) with
   | (Imm a, Imm b) ->
-    (match op with
-     | "+" -> Some (a + b)
-     | "-" -> Some (a - b)
-     | "*" -> Some (a * b)
-     | "/" when b <> 0 -> Some (a / b)
-     | "%" when b <> 0 -> Some (a mod b)
-     | "==" -> Some (if a = b then 1 else 0)
-     | "!=" -> Some (if a <> b then 1 else 0)
-     | "<" -> Some (if a < b then 1 else 0)
-     | "<=" -> Some (if a <= b then 1 else 0)
-     | ">" -> Some (if a > b then 1 else 0)
-     | ">=" -> Some (if a >= b then 1 else 0)
-     | _ -> None)
+  (match op with
+   | "+" -> Some (word_mod (a + b))
+   | "-" -> Some (word_mod (a - b))
+   | "*" -> Some (word_mod (a * b))
+   | "/" when b <> 0 -> Some (word_mod (a / b))
+   | "%" when b <> 0 -> Some (word_mod (a mod b))
+   | "==" -> Some (if a = b then 1 else 0)
+   | "!=" -> Some (if a <> b then 1 else 0)
+   | "<" -> Some (if a < b then 1 else 0)
+   | "<=" -> Some (if a <= b then 1 else 0)
+   | ">" -> Some (if a > b then 1 else 0)
+   | ">=" -> Some (if a >= b then 1 else 0)
+   | _ -> None)
   | _ -> None
 
 let eval_unop op op1 =
   match op1 with
   | Imm a ->
-    (match op with
-     | "!" -> Some (if a = 0 then 1 else 0)
-     | "-" -> Some (-a)
-     | "+" -> Some a
-     | _ -> None)
+  (match op with
+   | "!" -> Some (if a = 0 then 1 else 0)
+   | "-" -> Some (word_mod (-a))
+   | "+" -> Some (word_mod a)
+   | _ -> None)
   | _ -> None
 
 let process_inst env inst =
