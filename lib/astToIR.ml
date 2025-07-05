@@ -399,8 +399,6 @@ let partition_blocks (insts : ir_inst list) : ir_block list =
 
 (* 优化版本的 ir 控制块 *)
 let func_to_ir_o (f : func_def) : ir_func_o =
-  temp_id := 0;
-  label_id := 0;
   let init_env =
     List.fold_left
       (fun acc name -> Env.add name (Var name) acc)
