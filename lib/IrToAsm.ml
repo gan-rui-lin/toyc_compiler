@@ -217,7 +217,7 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
         let r, spill = allocate_reg (Var v) live_out in
         if r = reg then ("", reg, spill)
         else (Printf.sprintf "\tmv %s, %s\n" reg r, reg, spill)
-    | Reg r -> if r <> reg then ((Printf.sprintf "\tmv %s %s\n" reg r), reg, None) else ("", reg, None)
+    | Reg r -> if r <> reg then ((Printf.sprintf "\tmv %s, %s\n" reg r), reg, None) else ("", reg, None)
     (* 如果和预分配寄存器不一致，那么执行 mv 指令 *)
   in
   match inst with
