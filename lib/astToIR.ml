@@ -323,10 +323,9 @@ let func_to_ir (f : func_def) : ir_func =
 let partition_blocks (insts : ir_inst list) : ir_block list =
   let rec split acc curr label label_map insts =
     match insts with
-    | [] -> (
-        match curr with
-        | [] -> List.rev acc
-        | _ -> failwith "Basic block must end with a terminator")
+    | [] -> 
+        List.rev acc
+        (*| _ -> failwith "Basic block must end with a terminator")*)
     | Label l :: rest -> (
         (* 当前块结束，开启新块 *)
         match curr with
