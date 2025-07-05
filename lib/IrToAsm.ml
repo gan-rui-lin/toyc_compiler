@@ -5,12 +5,75 @@ open Ir
 (* 但是 IR 步骤的 operand 是假设无穷多个寄存器的 *)
 (* 这里需要考虑做寄存器分配和放在栈空间暂存 *)
 (* 函数实现时要考虑在 call 之前保存使用寄存器, 因为可能在之后被更改 *)
+(* 没有考虑到 IR 的虚拟寄存器号超过 t7; 此时不应该直接使用 *)
 
+(* 优化 IR 也使用这一偏移量 *)
 let stack_offset = ref 0
-let var_env = Hashtbl.create 1024
-let reg_map : (string, string) Hashtbl.t = Hashtbl.create 64
-let spilled_vars : (string, int) Hashtbl.t = Hashtbl.create 64
-let reg_pool = ref [ "t0"; "t1"; "t2"; "t3"; "t4"; "t5"; "t6" ]
+let var_env = Hashtbl.create 1024 (* 用于完全栈分配版本 *)
+
+let reg_map : (string, string) Hashtbl.t =
+  Hashtbl.create 64 (* 维护变量名和分配的寄存器号的映射 *)
+
+let spilled_vars : (string, int) Hashtbl.t =
+  Hashtbl.create 64 (* 被暂时存放到内存里的变量名和内存偏移量 *)
+
+let reg_pool = ref [ "t0"; "t1"; "t2"; "t3"; "t4"; "t5"; "t6" ] (* 可用寄存器池 *)
+
+let valid_regs =
+  [
+    "zero";
+    "ra";
+    "sp";
+    "gp";
+    "tp";
+    "t0";
+    "t1";
+    "t2";
+    "t3";
+    "t4";
+    "t5";
+    "t6";
+    "s0";
+    "s1";
+    "s2";
+    "s3";
+    "s4";
+    "s5";
+    "s6";
+    "s7";
+    "s8";
+    "s9";
+    "s10";
+    "s11";
+    "a0";
+    "a1";
+    "a2";
+    "a3";
+    "a4";
+    "a5";
+    "a6";
+    "a7";
+  ]
+
+(* 一般变量使用 spill_to_stack; 函数参数使用这个函数要额外更新 offset *)
+let spill_to_stack var =
+  stack_offset := !stack_offset + 4;
+  Hashtbl.add spilled_vars var !stack_offset;
+  !stack_offset
+
+(* 返回这一操作所需要执行的指令串 *)
+(* 调用者确保 reg 是可分配的 *)
+let load_var_from_stack (var : string) (reg : string) : string =
+  try
+    let offset = Hashtbl.find spilled_vars var in
+    Hashtbl.remove spilled_vars var;
+    Hashtbl.add reg_map var reg;
+
+    (* 加载栈上的值到指定寄存器 *)
+    Printf.sprintf "\tlw %s, %d(sp) # reload %s\n" reg offset var
+  with Not_found ->
+    failwith
+      ("[load_var_from_stack] Variable " ^ var ^ " not found in spilled_vars")
 
 let fresh_temp () : string =
   match !reg_pool with
@@ -19,40 +82,71 @@ let fresh_temp () : string =
       r
   | [] -> failwith "No free temporary registers available"
 
-(* 为 operand 分配寄存器 *)
-let allocate_reg (op : operand) (live_out : StringSet.t) :
+(* 使用 reg 寄存器; 从 reg_pool 里面移除 *)
+(* 仅仅更新 reg_pool *)
+let use_temp reg =
+  let new_pool = List.filter (fun (x : string) -> x <> reg) !reg_pool in
+  reg_pool := new_pool
+
+let free_temp reg =
+  let to_remove = ref [] in
+  (* 移除所有存放在 reg 里的 var *)
+  Hashtbl.iter
+    (fun var r -> if r = reg then to_remove := var :: !to_remove)
+    reg_map;
+  List.iter (Hashtbl.remove reg_map) !to_remove;
+  reg_pool := reg :: !reg_pool
+
+(* 为 左值的 operand 分配寄存器 *)
+let rec allocate_reg (op : operand) (live_out : StringSet.t) :
     string * string option =
   match op with
   | Reg v -> (
-      (* Reg v 表示希望使用 v 这个物理寄存器，我们要先检查是否空闲 *)
-      let occupying_var =
-        Hashtbl.fold
-          (fun var reg acc -> if reg = v then Some var else acc)
-          reg_map None
-      in
-      match occupying_var with
-      | None ->
-          (* 空闲，可以直接使用 *)
-          (v, None)
-      | Some var ->
-          if StringSet.mem var live_out then (
-            (* 该寄存器被活跃变量占用，必须先 spill *)
-            let offset =
-              if Hashtbl.mem spilled_vars var then Hashtbl.find spilled_vars var
-              else (
-                stack_offset := !stack_offset - 4;
-                Hashtbl.add spilled_vars var !stack_offset;
-                !stack_offset)
-            in
-            (* 将寄存器让出，同时更新 reg_map *)
-            Hashtbl.remove reg_map var;
-            ( v,
-              Some (Printf.sprintf "\tsw %s, %d(sp) # spill %s\n" v offset var)
-            ))
-          else (
-            (* 不活跃，直接释放寄存器给 Reg v *)
-            Hashtbl.remove reg_map var;
-            (v, None)))
+      if
+        (* Reg v 表示希望使用 v 这个物理寄存器，我们要先检查是否空闲 *)
+        (* 如果 v 不在实际寄存器里面, 则重新分配, 并更新映射 *)
+        not (List.mem v valid_regs)
+      then
+        (* 随便选择一个合法寄存器; TODO:并记录 IR_reg 和 Phy_reg 的映射 *)
+        try
+          let r = fresh_temp () in
+          allocate_reg (Reg r) live_out
+        with _ -> allocate_reg (Reg "t0") live_out (* 那就把 t0 踢走 *)
+      else
+        let occupying_var =
+          Hashtbl.fold
+            (fun var reg acc -> if reg = v then Some var else acc)
+            reg_map None
+        in
+        match occupying_var with
+        | None ->
+            (* 空闲，可以直接使用 *)
+            (v, None)
+        | Some var ->
+            (* 原来使用的 v 寄存器变成闲置 *)
+            free_temp v;
+            if StringSet.mem var live_out then (
+              (* 该寄存器被活跃变量占用，必须先 spill *)
+              let offset =
+                if Hashtbl.mem spilled_vars var then
+                  Hashtbl.find spilled_vars var
+                else (
+                  stack_offset := !stack_offset - 4;
+                  Hashtbl.add spilled_vars var !stack_offset;
+                  !stack_offset)
+              in
+              (* 将寄存器让出，同时更新 reg_map *)
+              ignore (spill_to_stack var );
+              Hashtbl.remove reg_map var;
+              (* spill 的变量放在 *)
+              ( v,
+                Some
+                  (Printf.sprintf "\tsw %s, %d(sp) # spill %s\n" v offset var)
+              ))
+            else (
+              (* 不活跃，直接释放寄存器给 Reg v *)
+              Hashtbl.remove reg_map var;
+              (v, None)))
   | Imm _ -> failwith "Cannot allocate register for immediate value"
   | Var v -> (
       (* For Var, allocate a fresh temp register *)
@@ -70,14 +164,12 @@ let allocate_reg (op : operand) (live_out : StringSet.t) :
         (* Printf.printf "Allocate Reg %s for Var %s\n" reg v; *)
         (reg, None))
 
-let free_temp reg =
-  (* Printf.printf "free temp Reg %s\n" reg; *)
-  reg_pool := reg :: !reg_pool
-
+(* 优化的 IR 不使用这一函数 *)
 let get_stack_offset var =
   try Hashtbl.find var_env var
   with Not_found -> failwith ("Unknown variable: " ^ var)
 
+(* 同名隐藏在 IR 阶段解决 *)
 (* 变量是否已经在符号表里面了, 存在则直接返回偏移, 否则分配新偏移 *)
 let alloc_stack var =
   try get_stack_offset var
@@ -86,15 +178,18 @@ let alloc_stack var =
     Hashtbl.add var_env var !stack_offset;
     !stack_offset
 
+(* 优化的 IR 不使用这一函数 *)
 let operand_to_str = function
   | Reg r | Var r -> Printf.sprintf "%d(sp)" (get_stack_offset r)
   | Imm i -> Printf.sprintf "%d" i
 
+(* 优化的 IR 不使用这一函数 *)
 let load_operand (reg : string) (op : operand) : string =
   match op with
   | Imm i -> Printf.sprintf "\tli %s, %d\n" reg i
   | Reg r | Var r -> Printf.sprintf "\tlw %s, %d(sp)\n" reg (get_stack_offset r)
 
+(* 优化的 IR 不使用这一函数 *)
 let compile_inst (inst : ir_inst) : string =
   match inst with
   | Binop (op, dst, lhs, rhs) ->
@@ -189,13 +284,12 @@ let compile_inst (inst : ir_inst) : string =
 
 let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
     string =
-  (* let get_var = function
-    | Reg x | Var x -> x
-    | Imm _ -> failwith "Not a valid dst"
-  in *)
   (* 指令, 操作数, spill 符 *)
-  (* 右值使用这个函数; 如果已经分配寄存器就不再额外分配 *)
+  (* 右值使用这两个函数; 如果已经分配寄存器就不再额外分配 *)
+  (* 函数内部不考虑 reg 寄存器是否可用; 调用时就应该确定 *)
+  (* 通过 allocate_reg 函数更新 reg_pool *)
   let load_operand_to_reg reg = function
+    (* Imm 就可以当作没有占用; 因为马上不使用 *)
     | Imm i -> (Printf.sprintf "\tli %s, %d\n" reg i, reg, None)
     | Var v ->
         (* Printf.printf "load a Var %s\n" v; *)
@@ -203,21 +297,29 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
         (* 已经分配的话返回已分配寄存器 *)
         let r, spill = allocate_reg (Var v) live_out in
         if r = reg then ("", reg, spill)
-        else (Printf.sprintf "\tmv %s, %s\n" reg r, reg, spill)
+        else (
+          use_temp reg;
+          (Printf.sprintf "\tmv %s, %s\n" reg r, reg, spill))
     | Reg r -> ("", r, None)
     (* 如果和预分配寄存器不一致，那么执行 mv 指令 *)
   in
-  (* 一定把操作数放到 reg 寄存器上 *)
+  (* 一定把操作数放到 reg 寄存器上的版本 *)
   let load_operand_to_reg_fix reg = function
     | Imm i -> (Printf.sprintf "\tli %s, %d\n" reg i, reg, None)
     | Var v ->
         (* Printf.printf "load a Var %s\n" v; *)
         (* 尝试分配寄存器 *)
         (* 已经分配的话返回已分配寄存器 *)
+        use_temp reg;
         let r, spill = allocate_reg (Var v) live_out in
         if r = reg then ("", reg, spill)
         else (Printf.sprintf "\tmv %s, %s\n" reg r, reg, spill)
-    | Reg r -> if r <> reg then ((Printf.sprintf "\tmv %s, %s\n" reg r), reg, None) else ("", reg, None)
+    | Reg r ->
+        if r <> reg then (
+          use_temp reg;
+          free_temp r;
+          (Printf.sprintf "\tmv %s, %s\n" reg r, reg, None))
+        else ("", reg, None)
     (* 如果和预分配寄存器不一致，那么执行 mv 指令 *)
   in
   match inst with
@@ -319,7 +421,8 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
         List.mapi
           (fun i arg ->
             if i < 8 then
-              let code, _, spill = load_operand_to_reg_fix (Printf.sprintf "a%d" i) arg 
+              let code, _, spill =
+                load_operand_to_reg_fix (Printf.sprintf "a%d" i) arg
               in
               Option.value ~default:"" spill ^ code
             else
@@ -358,7 +461,8 @@ let compile_inst_with_liveness (inst : ir_inst) (live_out : StringSet.t) :
       let ra_offset = get_stack_offset "ra" in
       Option.value ~default:"" spill
       ^ code
-      ^ (if code_reg <> "a0" then Printf.sprintf "\tmv a0, %s\n" code_reg else "")
+      ^ (if code_reg <> "a0" then Printf.sprintf "\tmv a0, %s\n" code_reg
+         else "")
       ^ Printf.sprintf "\tlw ra, %d(sp)\n\taddi sp, sp, 1600\n\tret\n" ra_offset
 
 let compile_block (blk : ir_block) : string =
@@ -434,7 +538,7 @@ let compile_func_o (f : ir_func_o) : string =
   let param_setup =
     List.mapi
       (fun i name ->
-        let off = alloc_stack name in
+        let off = spill_to_stack name in
         if i < 8 then Printf.sprintf "\tsw a%d, %d(sp)\n" i off
         else
           Printf.sprintf "\tlw t0, %d(sp)\n\tsw t0, %d(sp)\n"
@@ -447,7 +551,7 @@ let compile_func_o (f : ir_func_o) : string =
 
   (* ra 入栈 *)
   let param_setup =
-    param_setup ^ Printf.sprintf "\tsw ra, %d(sp)\n" (alloc_stack "ra")
+    param_setup ^ Printf.sprintf "\tsw ra, %d(sp)\n" (spill_to_stack "ra")
   in
 
   let body_code =
