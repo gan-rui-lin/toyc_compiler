@@ -538,7 +538,7 @@ let compile_func_o (f : ir_func_o) : string =
   let param_setup =
     List.mapi
       (fun i name ->
-        let off = spill_to_stack name in
+        let off = alloc_stack name in
         if i < 8 then Printf.sprintf "\tsw a%d, %d(sp)\n" i off
         else
           Printf.sprintf "\tlw t0, %d(sp)\n\tsw t0, %d(sp)\n"
@@ -551,7 +551,7 @@ let compile_func_o (f : ir_func_o) : string =
 
   (* ra 入栈 *)
   let param_setup =
-    param_setup ^ Printf.sprintf "\tsw ra, %d(sp)\n" (spill_to_stack "ra")
+    param_setup ^ Printf.sprintf "\tsw ra, %d(sp)\n" (alloc_stack "ra")
   in
 
   let body_code =
