@@ -127,6 +127,7 @@ let process_terminator env term =
 
 (* 构建 CFG 并清理不可达块 *)
 let build_cfg (blocks : ir_block list) : ir_block list =
+  if blocks = [] then [] else
   (* 1. 构造 label -> block 的映射 *)
   let label_map =
     List.fold_left (fun m b -> StringMap.add b.label b m) StringMap.empty blocks
@@ -149,7 +150,7 @@ let build_cfg (blocks : ir_block list) : ir_block list =
     | TermRet _         -> ()
   ) blocks;
   (* 4. 不可达块清理：从入口执行 DFS *)
-  let entry_label = match blocks with hd::_ -> hd.label | [] -> failwith "CFG build: empty block list" in
+  let entry_label = (List.hd blocks).label in
   let visited = Hashtbl.create (List.length blocks) in
   let rec dfs lbl =
     if not (Hashtbl.mem visited lbl) then begin
