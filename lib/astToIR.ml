@@ -96,8 +96,42 @@ let rec expr_to_ir (ctx : context) (e : expr) : operand * ir_inst list =
       | _ ->
           let res = fresh_temp () in
           (res, code @ [ Unop (string_of_unop op, res, operand) ]))
-  | Binop (Land, _, _) | Binop (Lor, _, _) ->
-      failwith "Short-circuiting logic expressions must be handled in control context"
+  | Binop (Land, e1, e2) ->
+      (* 短路与: a && b *)
+      let lhs, c1 = expr_to_ir ctx e1 in
+      let res = fresh_temp() in
+      let l_rhs = fresh_label() in
+      let l_end = fresh_label() in
+      let rhs, c2 = expr_to_ir ctx e2 in
+      let tmp = fresh_temp() in
+      let code =
+        c1 @
+        [ Assign(res, lhs)           (* res = lhs *) ] @
+        [ IfGoto(res, l_rhs)         (* if lhs != 0 goto rhs *) ; Assign(res, Imm 0); Goto l_end ] @
+        [ Label l_rhs ] @
+        c2 @ [ Assign(tmp, rhs); Binop ("!=", res, tmp, Imm 0) ] @
+        [ Label l_end ]
+      in
+      res, code
+
+  | Binop (Lor, e1, e2) ->
+      (* 短路或: a || b *)
+      let lhs, c1 = expr_to_ir ctx e1 in
+      let res = fresh_temp() in
+      let l_rhs = fresh_label() in
+      let l_end = fresh_label() in
+      let rhs, c2 = expr_to_ir ctx e2 in
+      let tmp = fresh_temp() in
+      let code =
+        c1 @
+        [ Assign(res, lhs)           (* res = lhs *) ] @
+        [ IfGoto(res, l_end)         (* if lhs != 0 goto end(true) *) ] @
+        [ Label l_rhs ] @
+        c2 @ [ Assign(tmp, rhs); Binop ("!=", res, tmp, Imm 0) ] @
+        [ Goto l_end; Label l_end ]  (* else res remains lhs==0? but overwritten by tmp!=0 *)
+      in
+      res, code
+
   | Binop (op, e1, e2) -> (
       let lhs, c1 = expr_to_ir ctx e1 in
       let rhs, c2 = expr_to_ir ctx e2 in
@@ -134,26 +168,23 @@ let rec expr_to_ir (ctx : context) (e : expr) : operand * ir_inst list =
       let ret = fresh_temp () in
       (ret, codes @ [ Call (ret, f, oprs) ])
 
-(* 控制流短路逻辑转换，用于 if/while 等 *)
-let rec expr_to_conditional_ir (ctx:context) (e:expr) ltrue lfalse : ir_inst list =
-  match e with
-  | Binop(Land,e1,e2) ->
-      let lmid = fresh_label() in
-      expr_to_conditional_ir ctx e1 lmid lfalse
-      @ [Label lmid]
-      @ expr_to_conditional_ir ctx e2 ltrue lfalse
-  | Binop(Lor,e1,e2) ->
-      let lmid = fresh_label() in
-      expr_to_conditional_ir ctx e1 ltrue lmid
-      @ [Label lmid]
-      @ expr_to_conditional_ir ctx e2 ltrue lfalse
-  | _ ->
-      let r,code = expr_to_ir ctx e in
-      code @ [IfGoto(r,ltrue); Goto lfalse]
+
 
 (* 语句翻译，返回 Normal/Returned，支持块作用域、break/continue、return 提前终止 *)
 let rec stmt_to_res (ctx : context) (s : stmt) : stmt_res =
   match s with
+  | If (Binop (Land, e1, e2), then_s, else_s_opt) ->
+      (* 嵌套：if (a) then (if (b) then then_s else else_s_opt) else else_s_opt *)
+      let inner = If (e2, then_s, else_s_opt) in
+      let full  = If (e1, Block [inner], else_s_opt) in
+      stmt_to_res ctx full
+
+  (* 2) 短路或展开 *)
+  | If (Binop (Lor, e1, e2), then_s, else_s_opt) ->
+      (* 嵌套：if (a) then then_s else (if (b) then then_s else else_s_opt) *)
+      let inner = If (e2, then_s, else_s_opt) in
+      let full  = If (e1, then_s, Some inner) in
+      stmt_to_res ctx full
   | Empty -> Normal []
   | ExprStmt e ->
       let _, code = expr_to_ir ctx e in
@@ -173,27 +204,62 @@ let rec stmt_to_res (ctx : context) (s : stmt) : stmt_res =
   | Return (Some e) ->
       let v, c = expr_to_ir ctx e in
       Returned (c @ [ Ret (Some v) ])
-  | If(cond,ts,Some fs) ->
-      let lt = fresh_label() and le = fresh_label() and lend = fresh_label() in
-      let cc = expr_to_conditional_ir ctx cond lt le in
-      let tr = stmt_to_res ctx ts and fr = stmt_to_res ctx fs in
-      let tc = let code=flatten tr in if ends_with_jump_or_return code then code else code@[Goto lend] in
-      let fc = let code=flatten fr in if ends_with_jump_or_return code then code else code@[Goto lend] in
-      let code = cc @ [Label lt] @ tc @ [Label le] @ fc @ [Label lend] in
-      (match tr,fr with Returned _,_ | _,Returned _-> Returned code | _-> Normal code)
-  | If(cond,ts,None) ->
-      let lt = fresh_label() and lend = fresh_label() in
-      let cc = expr_to_conditional_ir ctx cond lt lend in
-      let tr = stmt_to_res ctx ts in
-      let tc = let code=flatten tr in if ends_with_jump_or_return code then code else code@[Goto lend] in
-      let code = cc @ [Label lt] @ tc @ [Label lend] in
-      (match tr with Returned _->Returned code | _->Normal code)
-  | While(cond,body) ->
-      let lc = fresh_label() and lb = fresh_label() and lend = fresh_label() in
-      let ctx2 = {ctx with break_lbl=Some lend; continue_lbl=Some lc} in
-      let cc = expr_to_conditional_ir ctx2 cond lb lend in
-      let bc = flatten (stmt_to_res ctx2 body) in
-      Normal ([Goto lc; Label lc] @ cc @ [Label lb] @ bc @ [Goto lc; Label lend])
+  | If (cond, tstmt, Some fstmt) -> (
+      let cnd, cc = expr_to_ir ctx cond in
+      let lthen = fresh_label ()
+      and lelse = fresh_label ()
+      and lend = fresh_label () in
+      let then_res = stmt_to_res ctx tstmt
+      and else_res = stmt_to_res ctx fstmt in
+      let raw_then = flatten then_res in
+      let then_code =
+        if ends_with_jump_or_return raw_then then raw_then
+        else raw_then @ [ Goto lend ]
+      in
+      let raw_else = flatten else_res in
+      let else_code =
+        if ends_with_jump_or_return raw_else then raw_else
+        else raw_else @ [ Goto lend ]
+      in
+      let code =
+        cc
+        @ [ IfGoto (cnd, lthen); Goto lelse ]
+        @ [ Label lthen ] @ then_code @ [ Label lelse ] @ else_code
+        @ [ Label lend ]
+      in
+      match (then_res, else_res) with
+      | Returned _, _ | _, Returned _ -> Returned code
+      | _ -> Normal code)
+  | If (cond, tstmt, None) ->
+      let cnd, cc = expr_to_ir ctx cond in
+      let lthen = fresh_label () and lskip = fresh_label () in
+      let then_res = stmt_to_res ctx tstmt in
+      let then_code = flatten then_res in
+      let code =
+        cc
+        @ [ IfGoto (cnd, lthen); Goto lskip ]
+        @ [ Label lthen ] @ then_code @ [ Label lskip ]
+      in
+      Normal code
+  | While (cond, body) ->
+      (* 循环标签 *)
+      let lcond = fresh_label ()
+      and lbody = fresh_label ()
+      and lend = fresh_label () in
+      let ctx_loop =
+        { ctx with break_lbl = Some lend; continue_lbl = Some lcond }
+      in
+      let cnd, ccode = expr_to_ir ctx_loop cond in
+      let body_res = stmt_to_res ctx_loop body in
+      let bcode = flatten body_res in
+      let code =
+        [ Goto lcond; Label lcond ]
+        @ ccode
+        @ [ IfGoto (cnd, lbody); Goto lend ]
+        @ [ Label lbody ] @ bcode @ [ Goto lcond; Label lend ]
+      in
+      (* 无法从循环体中直接 return：若想支持可在 body_res 捕获 *)
+      Normal code
   | Break -> (
       match ctx.break_lbl with
       | Some lbl -> Normal [ Goto lbl ]
