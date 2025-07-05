@@ -3,9 +3,9 @@
 open Ir
 
 let string_of_operand = function
-  | Reg name -> name
-  | Imm i -> string_of_int i
-  | Var name -> name
+  | Reg name -> "Reg " ^ name
+  | Imm i -> "Imm " ^ string_of_int i
+  | Var name -> "Var " ^ name
 
 let string_of_operands ops = String.concat ", " (List.map string_of_operand ops)
 
