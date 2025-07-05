@@ -54,3 +54,12 @@ type func_def = {
 
 (* 编译单元（整个程序） *)
 type comp_unit = func_def list (* 函数定义列表 *)
+
+let rec split_and = function
+  | Binop (Land, x, y) -> split_and x @ split_and y
+  | e                  -> [e]
+
+(* 拆成一串 || 子表达式 *)
+let rec split_or = function
+  | Binop (Lor, x, y) -> split_or x @ split_or y
+  | e                 -> [e]

@@ -203,6 +203,57 @@ let rec expr_to_ir (ctx : context) (e : expr) : operand * ir_inst list =
       let ret = fresh_temp () in
       (ret, codes @ [ Call (ret, f, oprs) ])
 
+(* 将 if(cond, then_b, else_b) 里的 cond 展开 *)
+let rec desugar_stmt = function
+  | If (cond, then_b, Some else_b) ->
+      let ands = split_and cond in
+      if List.length ands > 1 then
+        (* a && b && c => nested if a then if b then if c ... *)
+        let rec nest_and = function
+          | [x]    -> If(x, then_b, Some else_b)
+          | hd::tl -> If(hd, Block [nest_and tl], Some else_b)
+          | []     -> Block []  (* 理论不会到 *)
+        in nest_and ands |> desugar_stmt
+      else
+      let ors = split_or cond in
+      if List.length ors > 1 then
+        (* a || b || c => if a then then_b else if b ... *)
+        let rec nest_or = function
+          | [x]    -> If(x, then_b, Some else_b)
+          | hd::tl -> If(hd, then_b, Some (nest_or tl))
+          | []     -> Block []
+        in nest_or ors |> desugar_stmt
+      else
+        (* 原子条件 *)
+        If(cond, desugar_stmt then_b, Some (desugar_stmt else_b))
+
+  | If(cond, then_b, None) ->
+      (* 类似处理一个分支的 if *)
+      let ands = split_and cond in
+      if List.length ands > 1 then
+        let rec nest_and = function
+          | [x]    -> If(x, then_b, None)
+          | hd::tl -> If(hd, Block [nest_and tl], None)
+          | []     -> Block []
+        in nest_and ands |> desugar_stmt
+      else
+      let ors = split_or cond in
+      if List.length ors > 1 then
+        let rec nest_or = function
+          | [x]    -> If(x, then_b, None)
+          | hd::tl -> If(hd, then_b, Some (nest_or tl))
+          | []     -> Block []
+        in nest_or ors |> desugar_stmt
+      else
+        If(cond, desugar_stmt then_b, None)
+
+  | While(cond, body) ->
+      (* 把 while(cond) body 变成 if(cond) body; while(cond) body *)
+      While(cond, desugar_stmt body)
+
+  | Block ss -> Block(List.map desugar_stmt ss)
+  | other    -> other
+
 (* 语句翻译，返回 Normal/Returned，支持块作用域、break/continue、return 提前终止 *)
 let rec stmt_to_res (ctx : context) (s : stmt) : stmt_res =
   match s with
@@ -315,13 +366,19 @@ let rec stmt_to_res (ctx : context) (s : stmt) : stmt_res =
 
 (* 函数转换 *)
 let func_to_ir (f : func_def) : ir_func =
+  let desugared_body =
+    match desugar_stmt (Block f.body) with
+    | Block ss -> ss
+    | _        -> f.body
+  in
+  let f' = { f with body = desugared_body } in
   (* 初始化 env: 参数映射 *)
   let init_env =
-    List.fold_left (fun m x -> Env.add x (Var x) m) Env.empty f.params
+    List.fold_left (fun m x -> Env.add x (Var x) m) Env.empty f'.params
   in
   let ctx0 = { env = init_env; break_lbl = None; continue_lbl = None } in
   (* 翻译函数体 *)
-  let body_res = stmt_to_res ctx0 (Block f.body) in
+  let body_res = stmt_to_res ctx0 (Block f'.body) in
   (* 先拿到全部 IR 指令 *)
   let raw_code = flatten body_res in
   (* 如果末尾恰好是一个孤立 Label，就把它丢掉 *)
@@ -330,7 +387,7 @@ let func_to_ir (f : func_def) : ir_func =
     | Label _ :: rest_rev -> List.rev rest_rev
     | _ -> raw_code
   in
-  { name = f.func_name; args = f.params; body = body_code }
+  { name = f'.func_name; args = f'.params; body = body_code }
 
 (* 线性IR -> 过程块IR *)
 let partition_blocks (insts : ir_inst list) : ir_block list =
