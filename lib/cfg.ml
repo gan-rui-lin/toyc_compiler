@@ -125,32 +125,49 @@ let process_terminator env term =
   | TermRet o -> TermRet (Option.map (eval_operand env) o)
   | TermGoto _ | TermSeq _ as t -> t
 
+(* 构建 CFG 并清理不可达块 *)
 let build_cfg (blocks : ir_block list) : ir_block list =
-  let label_map = Hashtbl.create 10 in
-  List.iter (fun blk -> Hashtbl.add label_map blk.label blk) blocks;
-  let succ_map = Hashtbl.create 10 in
-  let pred_map = Hashtbl.create 10 in
-  List.iter (fun blk ->
-    Hashtbl.replace succ_map blk.label [];
-    Hashtbl.replace pred_map blk.label []
-  ) blocks;
-  List.iter (fun blk ->
-    let succs = match blk.terminator with
-      | TermGoto l -> [l]
-      | TermIf (_, l1, l2) -> [l1; l2]
-      | TermSeq l -> [l]
-      | TermRet _ -> []
+  (* 1. 构造 label -> block 的映射 *)
+  let label_map =
+    List.fold_left (fun m b -> StringMap.add b.label b m) StringMap.empty blocks
+  in
+  (* 2. 清空 preds/succs *)
+  List.iter (fun b -> b.preds <- []; b.succs <- []) blocks;
+  (* 3. 填充 preds/succs *)
+  List.iter (fun b ->
+    let add_edge from_lbl to_lbl =
+      match StringMap.find_opt to_lbl label_map with
+      | Some succ ->
+          b.succs <- to_lbl :: b.succs;
+          succ.preds <- from_lbl :: succ.preds
+      | None -> ()  (* 忽略不存在的目标 *)
     in
-    Hashtbl.replace succ_map blk.label succs;
-    List.iter (fun s ->
-      let old = try Hashtbl.find pred_map s with _ -> [] in
-      Hashtbl.replace pred_map s (blk.label :: old)) succs
+    match b.terminator with
+    | TermGoto l        -> add_edge b.label l
+    | TermSeq l         -> add_edge b.label l
+    | TermIf (_, l1, l2) -> add_edge b.label l1; add_edge b.label l2
+    | TermRet _         -> ()
   ) blocks;
-  List.iter (fun blk ->
-    blk.succs <- (try Hashtbl.find succ_map blk.label with _ -> []);
-    blk.preds <- (try Hashtbl.find pred_map blk.label with _ -> [])
-  ) blocks;
-  blocks
+  (* 4. 不可达块清理：从入口执行 DFS *)
+  let entry_label = match blocks with hd::_ -> hd.label | [] -> failwith "CFG build: empty block list" in
+  let visited = Hashtbl.create (List.length blocks) in
+  let rec dfs lbl =
+    if not (Hashtbl.mem visited lbl) then begin
+      Hashtbl.add visited lbl ();
+      match StringMap.find_opt lbl label_map with
+      | Some blk -> List.iter dfs blk.succs
+      | None     -> ()
+    end
+  in
+  dfs entry_label;
+  (* 5. 过滤并返回可达块，并修剪 succs/preds *)
+  let reachable = List.filter (fun b -> Hashtbl.mem visited b.label) blocks in
+  let reach_set = List.fold_left (fun s b -> StringMap.add b.label () s) StringMap.empty reachable in
+  List.iter (fun b ->
+    b.succs <- List.filter (fun l -> StringMap.mem l reach_set) b.succs;
+    b.preds <- List.filter (fun l -> StringMap.mem l reach_set) b.preds
+  ) reachable;
+  reachable
 
 let constant_propagation (blocks : ir_block list) : ir_block list =
   let block_map = List.fold_left (fun m b -> StringMap.add b.label b m) StringMap.empty blocks in

@@ -96,77 +96,7 @@ let rec expr_to_ir (ctx : context) (e : expr) : operand * ir_inst list =
       | _ ->
           let res = fresh_temp () in
           (res, code @ [ Unop (string_of_unop op, res, operand) ]))
-  | Binop (Land, e1, e2) ->
-    (* 短路与: a && b *)
-    let lhs, c1 = expr_to_ir ctx e1 in
-    let res    = fresh_temp () in
-    let l_rhs  = fresh_label () in
-    let l_end  = fresh_label () in
-    let rhs, c2 = expr_to_ir ctx e2 in
-    let tmp1   = fresh_temp () in
-    let tmp2   = fresh_temp () in
-    let code =
-      (* 1. 默认 false *)
-      [ Assign(res, Imm 0) ]
-      (* 2. 计算 lhs *)
-      @ c1
-      (* 3. t1 = (lhs != 0); if t1 goto rhs  else jump to end *)
-      @ [ Binop("!=", tmp1, lhs, Imm 0)
-        ; IfGoto (tmp1, l_rhs)
-        ; Goto    l_end
-        ; Label   l_rhs
-        ]
-      (* 4. 计算 rhs *)
-      @ c2
-      (* 5. t2 = (rhs != 0); if t2 goto set_true else jump to end *)
-      @ [ Binop("!=", tmp2, rhs, Imm 0)
-        ; IfGoto(tmp2, l_end ^ "_set") (* 我们用另一个临时标签 *)
-        ; Goto    l_end
-        ]
-      (* 6. set_true: res = 1 *)
-      @ [ Label (l_end ^ "_set")
-        ; Assign(res, Imm 1)
-        ]
-      (* 7. end 标签 *)
-      @ [ Label l_end ]
-    in
-    res, code
-
-| Binop (Lor, e1, e2) ->
-    (* 短路或: a || b *)
-    let lhs, c1 = expr_to_ir ctx e1 in
-    let res    = fresh_temp () in
-    let l_rhs  = fresh_label () in
-    let l_end  = fresh_label () in
-    let rhs, c2 = expr_to_ir ctx e2 in
-    let tmp1   = fresh_temp () in
-    let tmp2   = fresh_temp () in
-    let code =
-      (* 1. 默认 false *)
-      [ Assign(res, Imm 0) ]
-      (* 2. 计算 lhs *)
-      @ c1
-      (* 3. t1 = (lhs != 0); if t1 goto set_true  else goto rhs *)
-      @ [ Binop("!=", tmp1, lhs, Imm 0)
-        ; IfGoto(tmp1, l_end ^ "_set")
-        ; Goto    l_rhs
-        ; Label   l_rhs
-        ]
-      (* 4. 计算 rhs *)
-      @ c2
-      (* 5. t2 = (rhs != 0); if t2 goto set_true else goto end *)
-      @ [ Binop("!=", tmp2, rhs, Imm 0)
-        ; IfGoto(tmp2, l_end ^ "_set")
-        ; Goto    l_end
-        ]
-      (* 6. set_true: res = 1 *)
-      @ [ Label (l_end ^ "_set")
-        ; Assign(res, Imm 1)
-        ]
-      (* 7. end 标签 *)
-      @ [ Label l_end ]
-    in
-    res, code
+  
   | Binop (op, e1, e2) -> (
       let lhs, c1 = expr_to_ir ctx e1 in
       let rhs, c2 = expr_to_ir ctx e2 in
