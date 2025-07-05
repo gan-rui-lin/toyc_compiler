@@ -97,42 +97,31 @@ let rec expr_to_ir (ctx : context) (e : expr) : operand * ir_inst list =
           let res = fresh_temp () in
           (res, code @ [ Unop (string_of_unop op, res, operand) ]))
   | Binop (Land, e1, e2) ->
-    (* 短路与: a && b *)
     let lhs, c1 = expr_to_ir ctx e1 in
-    let res = fresh_temp () in
-    let l_rhs = fresh_label () in
-    let l_true = fresh_label () in
-    let l_end = fresh_label () in
     let rhs, c2 = expr_to_ir ctx e2 in
+    let dst = fresh_temp () in
+    (* 逻辑与结果为 lhs != 0 && rhs != 0 *)
+    let t1 = fresh_temp () in
+    let t2 = fresh_temp () in
     let code =
-      Assign (res, Imm 0) ::                    (* 默认值为 false *)
-      c1
-      @ [ IfGoto (lhs, l_rhs); Goto l_end ]     (* 如果 lhs != 0，继续执行 rhs，否则跳转结束 *)
-      @ [ Label l_rhs ]
-      @ c2
-      @ [ IfGoto (rhs, l_true); Goto l_end ]    (* 如果 rhs != 0，则成立 *)
-      @ [ Label l_true; Assign (res, Imm 1) ]
-      @ [ Label l_end ]
+      c1 @ [ Binop ("!=", t1, lhs, Imm 0) ]
+      @ c2 @ [ Binop ("!=", t2, rhs, Imm 0) ]
+      @ [ Binop ("&&", dst, t1, t2) ]
     in
-    (res, code)
-  | Binop (Lor, e1, e2) ->
-    (* 短路或: a || b *)
+    (dst, code)
+
+| Binop (Lor, e1, e2) ->
     let lhs, c1 = expr_to_ir ctx e1 in
-    let res = fresh_temp () in
-    let l_rhs = fresh_label () in
-    let l_end = fresh_label () in
     let rhs, c2 = expr_to_ir ctx e2 in
+    let dst = fresh_temp () in
+    let t1 = fresh_temp () in
+    let t2 = fresh_temp () in
     let code =
-      Assign (res, Imm 1) ::                    (* 默认值为 true *)
-      c1
-      @ [ IfGoto (lhs, l_end) ]                 (* 如果 lhs 为真，直接成功 *)
-      @ [ Label l_rhs ]
-      @ c2
-      @ [ IfGoto (rhs, l_end) ]                 (* 如果 rhs 为真，成功 *)
-      @ [ Assign (res, Imm 0) ]                 (* 否则为 false *)
-      @ [ Label l_end ]
+      c1 @ [ Binop ("!=", t1, lhs, Imm 0) ]
+      @ c2 @ [ Binop ("!=", t2, rhs, Imm 0) ]
+      @ [ Binop ("||", dst, t1, t2) ]
     in
-    (res, code)
+    (dst, code)
   | Binop (op, e1, e2) -> (
       let lhs, c1 = expr_to_ir ctx e1 in
       let rhs, c2 = expr_to_ir ctx e2 in
