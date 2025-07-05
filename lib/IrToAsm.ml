@@ -164,12 +164,16 @@ let compile_func_o (f : ir_func_o) : string =
   Hashtbl.clear var_env;
   stack_offset := 0;
 
-  (* 参数入栈 *)
   let param_setup =
     List.mapi
       (fun i name ->
         let off = alloc_stack name in
-        Printf.sprintf "\tsw a%d, %d(sp)\n" i off)
+        if i < 8 then Printf.sprintf "\tsw a%d, %d(sp)\n" i off
+        else
+          Printf.sprintf "\tlw t0, %d(sp)\n\tsw t0, %d(sp)\n"
+            (* offset 为 call 语句将第 i 个参数压入的偏移 *)
+            (-4 * (i - 8))
+            off)
       f.args
     |> String.concat ""
   in
